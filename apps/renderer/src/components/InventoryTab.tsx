@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { StockBalanceItem, StockMovementLogItem } from '@bakery/contracts';
+import type { StockBalanceItem, StockMovementLogItem } from '@rz-crm/contracts';
 
 interface InventoryTabProps {
   storeId?: number;

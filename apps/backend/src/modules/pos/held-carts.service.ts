@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { HeldCartEntity } from '@bakery/database';
-import { HeldCart, CreateHeldCartInput } from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+import { HeldCartEntity } from '@rz-crm/database';
+import { HeldCart, CreateHeldCartInput } from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class HeldCartsService {

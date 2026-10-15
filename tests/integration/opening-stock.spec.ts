@@ -7,8 +7,8 @@ import {
   ActiveBackend,
   CatalogService,
   InventoryService,
-} from '@bakery/backend';
-import { StoreEntity, StockMovementEntity, ItemEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, StockMovementEntity, ItemEntity } from '@rz-crm/database';
 
 describe('Opening Stock & Ledger Movement Integration', () => {
   let tempDir: string;

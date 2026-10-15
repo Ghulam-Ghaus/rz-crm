@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ProductListItem } from '@bakery/contracts';
+import { ProductListItem } from '@rz-crm/contracts';
 
 interface GrnItemSearchPickerProps {
   products: ProductListItem[];

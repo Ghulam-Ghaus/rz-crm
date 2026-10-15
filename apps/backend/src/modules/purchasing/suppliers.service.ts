@@ -4,7 +4,7 @@ import {
   SupplierEntity,
   SupplierPaymentEntity,
   GoodsReceiptEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   Supplier,
   CreateSupplierInput,
@@ -13,8 +13,8 @@ import {
   CreateSupplierPaymentInput,
   SupplierLedgerResponse,
   SupplierLedgerEntry,
-} from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class SuppliersService {

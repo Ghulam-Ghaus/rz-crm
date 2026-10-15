@@ -11,12 +11,12 @@ import {
   ExpenseEntity,
   SalaryPaymentEntity,
   SalaryAdvanceEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   GetProfitLossQuery,
   ProfitLossReport,
   ProfitLossItemBreakdown,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 @Injectable()
 export class ProfitLossService {

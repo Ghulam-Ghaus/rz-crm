@@ -1,3 +1,4 @@
+import { AppIdentity1699999999000 } from './1699999999000-AppIdentity.js';
 import { InitialSystemStoreSettings1700000000000 } from './1700000000000-InitialSystemStoreSettings.js';
 import { CatalogUnitsInventoryLedger1700000001000 } from './1700000001000-CatalogUnitsInventoryLedger.js';
 import { ShiftsSalesCashDrawer1700000002000 } from './1700000002000-ShiftsSalesCashDrawer.js';
@@ -10,6 +11,7 @@ import { RolesAndFormPermissions1700000008000 } from './1700000008000-RolesAndFo
 import { ExpensesAndStaffPayroll1700000009000 } from './1700000009000-ExpensesAndStaffPayroll.js';
 
 export const MIGRATIONS = [
+  AppIdentity1699999999000,
   InitialSystemStoreSettings1700000000000,
   CatalogUnitsInventoryLedger1700000001000,
   ShiftsSalesCashDrawer1700000002000,
@@ -22,6 +24,7 @@ export const MIGRATIONS = [
   ExpensesAndStaffPayroll1700000009000,
 ];
 
+export * from './1699999999000-AppIdentity.js';
 export * from './1700000000000-InitialSystemStoreSettings.js';
 export * from './1700000001000-CatalogUnitsInventoryLedger.js';
 export * from './1700000002000-ShiftsSalesCashDrawer.js';

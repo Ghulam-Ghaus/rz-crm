@@ -1,5 +1,5 @@
 {
-  "name": "@bakery/renderer",
+  "name": "@rz-crm/renderer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@bakery/contracts": "workspace:*",
+    "@rz-crm/contracts": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

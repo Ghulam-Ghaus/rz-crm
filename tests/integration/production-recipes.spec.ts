@@ -8,8 +8,8 @@ import {
   CatalogService,
   RecipesService,
   ProductionRunsService,
-} from '@bakery/backend';
-import { StoreEntity, StockMovementEntity, InventoryLotEntity, StockLocationEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, StockMovementEntity, InventoryLotEntity, StockLocationEntity } from '@rz-crm/database';
 
 describe('Phase 5 — Production & Recipe Management Integration', () => {
   let tempDir: string;

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { UnitEntity, UnitConversionEntity } from '@bakery/database';
-import { Unit, UnitConversion, CreateUnitInput } from '@bakery/contracts';
+import { UnitEntity, UnitConversionEntity } from '@rz-crm/database';
+import { Unit, UnitConversion, CreateUnitInput } from '@rz-crm/contracts';
 
 @Injectable()
 export class UnitsService {

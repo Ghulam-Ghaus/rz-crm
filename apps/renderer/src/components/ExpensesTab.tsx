@@ -7,7 +7,7 @@ import type {
   StaffPayrollSheetRow,
   User,
   EmployeeMonthlyStatementResponse,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 interface ExpensesTabProps {
   storeId?: number;

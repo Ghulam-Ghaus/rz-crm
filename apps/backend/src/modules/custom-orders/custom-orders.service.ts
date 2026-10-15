@@ -7,15 +7,15 @@ import {
   CustomerEntity,
   ShiftEntity,
   CashTransactionEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   CustomOrder,
   CustomOrderStatus,
   CreateCustomOrderInput,
   UpdateCustomOrderStatusInput,
   AddCustomOrderPaymentInput,
-} from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class CustomOrdersService {

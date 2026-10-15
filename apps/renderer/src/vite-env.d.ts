@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { BakeryDesktopApi } from '@bakery/contracts';
+import { BakeryDesktopApi } from '@rz-crm/contracts';
 
 declare global {
   interface Window {

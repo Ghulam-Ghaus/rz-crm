@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { CustomerEntity } from '@bakery/database';
-import { Customer, CreateCustomerInput } from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+import { CustomerEntity } from '@rz-crm/database';
+import { Customer, CreateCustomerInput } from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class CustomersService {

@@ -7,7 +7,7 @@ import {
   ActiveBackend,
   BackupService,
   CatalogService,
-} from '@bakery/backend';
+} from '@rz-crm/backend';
 
 describe('Backup & Restore Integration Slice', () => {
   let tempDir: string;

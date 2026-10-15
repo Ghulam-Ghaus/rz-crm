@@ -7,7 +7,7 @@ import {
   ActiveBackend,
   CatalogService,
   BarcodeService,
-} from '@bakery/backend';
+} from '@rz-crm/backend';
 
 describe('Barcode Resolver Service (Unit/Integration Tests)', () => {
   let tempDir: string;

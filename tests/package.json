@@ -1,5 +1,5 @@
 {
-  "name": "@bakery/tests",
+  "name": "@rz-crm/tests",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bakery/backend": "workspace:*",
-    "@bakery/config": "workspace:*",
-    "@bakery/contracts": "workspace:*",
-    "@bakery/database": "workspace:*",
-    "@bakery/shared": "workspace:*",
+    "@rz-crm/backend": "workspace:*",
+    "@rz-crm/config": "workspace:*",
+    "@rz-crm/contracts": "workspace:*",
+    "@rz-crm/database": "workspace:*",
+    "@rz-crm/shared": "workspace:*",
     "better-sqlite3": "^11.8.1",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.20"

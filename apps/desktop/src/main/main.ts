@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bootstrapBackend, ActiveBackend } from '@bakery/backend';
+import { bootstrapBackend, ActiveBackend } from '@rz-crm/backend';
 import { registerIpcHandlers } from './ipc-handlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,7 +36,7 @@ async function createWindow(): Promise<void> {
     height: 800,
     minWidth: 1024,
     minHeight: 640,
-    title: 'Mezaan Sweets & Bakers — میزان سویٹس اینڈ بیکرز',
+    title: 'RZ Enterprises CRM',
     icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
@@ -93,7 +93,7 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   try {
     // 2. Set App User Model ID for Windows notifications & taskbar
-    app.setAppUserModelId('com.bakerystore.app');
+    app.setAppUserModelId('com.rzenterprises.crm');
 
     // 3. Resolve Windows AppData directory
     const userDataDir = app.getPath('userData');
@@ -114,11 +114,11 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error('[Main] Fatal bootstrap error:', err);
     dialog.showErrorBox(
-      'Bakery Store - Startup Error',
-      'The application could not start because the database file is unreadable or corrupted.\n\n' +
+      'RZ Enterprises CRM - Startup Error',
+      'The application could not start because the database file is unreadable, corrupted, or not an RZ CRM database.\n\n' +
         'Details: ' + (err instanceof Error ? err.message : String(err)) + '\n\n' +
         'To recover, restore a recent snapshot from your backups folder:\n' +
-        'AppData\\Roaming\\@bakery\\desktop\\data\\backups'
+        'AppData\\Roaming\\@rz-crm\\desktop\\backups'
     );
     app.quit();
   }

@@ -7,7 +7,7 @@ import {
   ActiveBackend,
   HealthService,
   StoreSettingsService,
-} from '@bakery/backend';
+} from '@rz-crm/backend';
 
 describe('NestJS Headless Backend Context Integration', () => {
   let tempDir: string;

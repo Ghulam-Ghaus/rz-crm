@@ -4,15 +4,15 @@ import {
   OpeningStockSessionEntity,
   StockMovementEntity,
   StockLocationEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   OpeningStockSession,
   ConfirmOpeningStockInput,
   StockBalanceItem,
   GetStockBalancesQuery,
   StockMovementLogItem,
-} from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class InventoryService {

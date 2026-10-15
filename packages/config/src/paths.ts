@@ -11,7 +11,8 @@ export interface AppPaths {
 
 /**
  * Resolves safe application data directories.
- * Under Windows, client business data lives in %APPDATA%/BakeryStore.
+ * Under Windows, business data lives in %APPDATA%/@rz-crm/desktop (database file: rz_crm.db).
+ * This is intentionally isolated from the legacy Bakery Store data directory.
  * Never stores business data inside the installed application directory.
  */
 export function resolveAppPaths(overrideBaseDir?: string): AppPaths {
@@ -19,17 +20,17 @@ export function resolveAppPaths(overrideBaseDir?: string): AppPaths {
 
   if (overrideBaseDir) {
     baseDir = overrideBaseDir;
-  } else if (process.env.BAKERY_DATA_DIR) {
-    baseDir = process.env.BAKERY_DATA_DIR;
+  } else if (process.env.RZ_CRM_DATA_DIR) {
+    baseDir = process.env.RZ_CRM_DATA_DIR;
   } else if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-    baseDir = path.join(appData, '@bakery', 'desktop');
+    baseDir = path.join(appData, '@rz-crm', 'desktop');
   } else {
     // Linux/macOS fallback for cross-platform test environments
-    baseDir = path.join(os.homedir(), '.bakery-store');
+    baseDir = path.join(os.homedir(), '.rz-crm');
   }
 
-  const databasePath = path.join(baseDir, 'data', 'bakery.db');
+  const databasePath = path.join(baseDir, 'data', 'rz_crm.db');
   const backupsDir = path.join(baseDir, 'backups');
   const logsDir = path.join(baseDir, 'logs');
 

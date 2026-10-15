@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { HealthCheckResponse } from '@bakery/contracts';
+import { HealthCheckResponse } from '@rz-crm/contracts';
 
 export interface HostElectronContext {
   version: string;

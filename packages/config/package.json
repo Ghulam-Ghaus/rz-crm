@@ -1,5 +1,5 @@
 {
-  "name": "@bakery/config",
+  "name": "@rz-crm/config",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@bakery/contracts": "workspace:*",
-    "@bakery/shared": "workspace:*",
+    "@rz-crm/contracts": "workspace:*",
+    "@rz-crm/shared": "workspace:*",
     "zod": "^3.24.2"
   },
   "devDependencies": {

@@ -8,7 +8,7 @@ import type {
   BackupStatus,
   CreateBackupInput,
   RestoreBackupInput,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 @Injectable()
 export class BackupService {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { bootstrapBackend, ActiveBackend, CatalogService, UnitsService } from '@bakery/backend';
+import { bootstrapBackend, ActiveBackend, CatalogService, UnitsService } from '@rz-crm/backend';
 
 describe('Phase 2 — Catalog, Units, & Barcodes Integration', () => {
   let tempDir: string;

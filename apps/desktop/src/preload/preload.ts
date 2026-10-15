@@ -89,7 +89,7 @@ import {
   MonthlyPayrollSheetResponse,
   EmployeeMonthlyStatementResponse,
   GetEmployeeStatementQuery,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 
 /**

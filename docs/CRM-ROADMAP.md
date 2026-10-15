@@ -14,7 +14,7 @@ This repository is a **separate copy** of the Bakery Store POS, pivoted into **R
 | DB identity guard | `app_identity.db_name = 'rz_crm'`; app refuses any other DB. |
 | Architecture | Unchanged fixed V1: Electron + React/TS + NestJS context + typed IPC + SQLite/better-sqlite3 + TypeORM. `synchronize=false`. |
 | Migrations | Fresh clean chain for `rz_crm` (bakery recipes/production/custom-orders/held-carts dropped). |
-| Packages | Rename scope `@bakery/*` → `@rz-crm/*`. |
+| Packages | Rename scope `@rz-crm/*` → `@rz-crm/*`. |
 | Repo | `https://github.com/Ghulam-Ghaus/rz-crm.git`, branch `main`, fresh history. Feature branches per phase. |
 | Tenancy | Single company/store; keep `store_id` for future. |
 | Money | Integer minor units + currency (PKR). Immutable ledgers; corrections by reversal. |
@@ -59,7 +59,7 @@ Status legend: ⬜ todo · 🟨 in progress · ✅ done
 | Phase | Branch | Scope | Gate | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **0 Repo setup** | `main` | Fresh git repo, README, remote `rz-crm`, push | `main` pushed to GitHub | 🟨 local commit done; push pending auth |
-| **1 Foundation** | `phase-1-foundation` | Commit baseline; rename `@bakery`→`@rz-crm`, app id/name, data dir; `app_identity` + guard; fresh migrations 0–2 (core, catalog/ledger, users/roles/audit); remove bakery-only modules from wiring | Clean build; app opens only `rz_crm.db`; test proves bakery.db never touched; migrations run on empty DB | ⬜ |
+| **1 Foundation** | `phase-1-foundation` | Rename `@bakery`→`@rz-crm`, app id/name, data dir → `@rz-crm\desktop\data\rz_crm.db`; `app_identity` stamp migration + pre-open read-only guard (blocks `bakery.db` and unstamped DBs). **Deferred to Phase 13:** pruning bakery tables/migrations/modules (code still depends on them) and UI rebrand (Phase 11). | Build, typecheck, 43 tests pass (incl. `tests/integration/identity-guard.spec.ts`); bakery.db proven byte-identical | 🟨 code done, awaiting your commit/merge |
 | **2 Catalog & Stock** | `phase-2-catalog-stock` | Categories, products/variants, units, barcodes, locations, immutable stock ledger, opening stock, low-stock/reorder | Ledger reconciles to balances; imports atomic/idempotent | ⬜ |
 | **3 Customers & Payments core** | `phase-3-payments` | Customers (credit limit/terms/ledger), unified payments, cheque lifecycle, bank accounts, status history, Cheque Register | State-machine tests; bounce reversal reconciles | ⬜ |
 | **4 Sales Terminal** | `phase-4-sales` | Cash/walk-in + credit invoices, split payments, shifts/cash drawer, receipt, idempotent sale | Stock, cash, receivables reconcile; duplicate/retry safe | ⬜ |

@@ -9,8 +9,8 @@ import {
   CustomOrdersService,
   HeldCartsService,
   ShiftsService,
-} from '@bakery/backend';
-import { StoreEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity } from '@rz-crm/database';
 
 describe('Phase 6 — Custom Orders, Advance Bookings & Held Carts Integration', () => {
   let tempDir: string;

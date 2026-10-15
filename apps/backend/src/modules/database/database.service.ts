@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { DatabaseManager, DatabaseHealthInfo } from '@bakery/database';
+import { DatabaseManager, DatabaseHealthInfo } from '@rz-crm/database';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {

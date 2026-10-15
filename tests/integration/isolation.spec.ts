@@ -43,7 +43,7 @@ describe('Architectural Invariants & Renderer Isolation', () => {
       ...(pkg.dependencies || {}),
     };
 
-    expect(allDeps['@bakery/database']).toBeUndefined();
+    expect(allDeps['@rz-crm/database']).toBeUndefined();
     expect(allDeps['better-sqlite3']).toBeUndefined();
     expect(allDeps['typeorm']).toBeUndefined();
     expect(allDeps['electron']).toBeUndefined();

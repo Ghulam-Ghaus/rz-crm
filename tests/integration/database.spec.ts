@@ -8,7 +8,7 @@ import {
   RegisterEntity,
   SettingEntity,
   SchemaMetadataEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 
 describe('SQLite Database & Migration #1 Integration', () => {
   let tempDir: string;

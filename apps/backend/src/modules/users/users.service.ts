@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import crypto from 'node:crypto';
 import { DatabaseService } from '../database/database.service.js';
-import { UserEntity, AuditLogEntity, RoleEntity } from '@bakery/database';
+import { UserEntity, AuditLogEntity, RoleEntity } from '@rz-crm/database';
 import {
   User,
   UserSession,
@@ -12,8 +12,8 @@ import {
   CreateRoleInput,
   UpdateRoleInput,
   DeleteRoleInput,
-} from '@bakery/contracts';
-import { nowUtcString, generateUuid } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString, generateUuid } from '@rz-crm/shared';
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   admin: ['*'],

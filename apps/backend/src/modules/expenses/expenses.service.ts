@@ -6,14 +6,14 @@ import {
   ShiftEntity,
   CashTransactionEntity,
   AuditLogEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   Expense,
   CreateExpenseInput,
   ListExpensesQuery,
   ExpenseCategory,
   CreateExpenseCategoryInput,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 function nowUtcString(): string {
   return new Date().toISOString();

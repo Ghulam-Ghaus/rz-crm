@@ -1,5 +1,5 @@
-appId: com.bakerystore.desktop
-productName: Bakery Store
+appId: com.rzenterprises.crm
+productName: RZ Enterprises CRM
 directories:
   output: release-dist
   buildResources: build

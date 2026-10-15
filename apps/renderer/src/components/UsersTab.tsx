@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { User, UserRole, Role } from '@bakery/contracts';
+import type { User, UserRole, Role } from '@rz-crm/contracts';
 
 interface UsersTabProps {
   storeId?: number;

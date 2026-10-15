@@ -9,8 +9,8 @@ import {
   SuppliersService,
   PurchaseOrdersService,
   GoodsReceivingService,
-} from '@bakery/backend';
-import { StoreEntity, StockMovementEntity, InventoryLotEntity, ProductVariantEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, StockMovementEntity, InventoryLotEntity, ProductVariantEntity } from '@rz-crm/database';
 
 describe('Phase 4 — Purchasing, Purchase Orders & Goods Receiving (GRN) Integration', () => {
   let tempDir: string;

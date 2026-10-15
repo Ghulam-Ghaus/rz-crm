@@ -24,7 +24,7 @@ import type {
   BackupManifest,
   BackupStatus,
   UserSession,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 import { LoginScreen } from './components/LoginScreen.js';
 import { InventoryTab } from './components/InventoryTab.js';
 import { UsersTab } from './components/UsersTab.js';

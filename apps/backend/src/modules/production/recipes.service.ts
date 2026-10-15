@@ -6,15 +6,15 @@ import {
   RecipeItemEntity,
   ProductVariantEntity,
   ProductEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   Recipe,
   RecipeVersion,
   RecipeItem,
   CreateRecipeInput,
   CreateRecipeVersionInput,
-} from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class RecipesService {

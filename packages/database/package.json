@@ -1,5 +1,5 @@
 {
-  "name": "@bakery/database",
+  "name": "@rz-crm/database",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@bakery/config": "workspace:*",
-    "@bakery/contracts": "workspace:*",
-    "@bakery/shared": "workspace:*",
+    "@rz-crm/config": "workspace:*",
+    "@rz-crm/contracts": "workspace:*",
+    "@rz-crm/shared": "workspace:*",
     "better-sqlite3": "^11.8.1",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.20"

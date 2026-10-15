@@ -10,8 +10,8 @@ import {
   PosSaleService,
   ProfitLossService,
   InventoryService,
-} from '@bakery/backend';
-import { StoreEntity, ProductVariantEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, ProductVariantEntity } from '@rz-crm/database';
 
 describe('Profit & Loss (P&L) Analytics & Dual Pricing Integration', () => {
   let tempDir: string;

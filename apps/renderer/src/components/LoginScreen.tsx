@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { User, UserSession } from '@bakery/contracts';
+import type { User, UserSession } from '@rz-crm/contracts';
 import { MezaanLogo } from './MezaanLogo.js';
 
 interface LoginScreenProps {

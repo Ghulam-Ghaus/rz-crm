@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { StoreEntity, InstallationEntity, RegisterEntity, SettingEntity } from '@bakery/database';
-import { Store, Installation, Register, Setting } from '@bakery/contracts';
+import { StoreEntity, InstallationEntity, RegisterEntity, SettingEntity } from '@rz-crm/database';
+import { Store, Installation, Register, Setting } from '@rz-crm/contracts';
 
 @Injectable()
 export class StoreSettingsService {

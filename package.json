@@ -1,8 +1,8 @@
 {
-  "name": "bakery-store",
+  "name": "rz-crm",
   "version": "0.1.0",
   "private": true,
-  "description": "Bakery Store Desktop Application",
+  "description": "RZ Enterprises CRM Desktop Application",
   "packageManager": "pnpm@11.20.0",
   "scripts": {
     "build": "pnpm -r run build",
@@ -15,10 +15,10 @@
     "preseed": "node scripts/switch-better-sqlite3.cjs node",
     "seed": "node scripts/seed.mjs",
     "postseed": "node scripts/switch-better-sqlite3.cjs electron",
-    "desktop:dev": "pnpm --filter @bakery/desktop dev",
-    "desktop:build": "pnpm --filter @bakery/desktop build",
-    "desktop:package": "pnpm --filter @bakery/desktop package",
-    "desktop:dist": "pnpm --filter @bakery/desktop dist"
+    "desktop:dev": "pnpm --filter @rz-crm/desktop dev",
+    "desktop:build": "pnpm --filter @rz-crm/desktop build",
+    "desktop:package": "pnpm --filter @rz-crm/desktop package",
+    "desktop:dist": "pnpm --filter @rz-crm/desktop dist"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",

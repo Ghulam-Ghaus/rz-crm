@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { createDataSource, DatabaseConnectionOptions } from './data-source.js';
 import { SchemaMetadataEntity } from './entities/schema-metadata.entity.js';
+import { assertRzCrmDatabase } from './identity-guard.js';
 
 export interface DatabaseHealthInfo {
   status: 'ok' | 'down';
@@ -24,6 +25,9 @@ export class DatabaseManager {
     if (this.dataSource && this.dataSource.isInitialized) {
       return this.dataSource;
     }
+
+    // Refuse wrong/legacy databases before opening them for write.
+    assertRzCrmDatabase(this.options.filePath);
 
     this.dataSource = createDataSource(this.options);
     await this.dataSource.initialize();

@@ -9,7 +9,7 @@ import {
   InstallationSchema,
   RegisterSchema,
   SettingSchema,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 describe('Contracts & Schemas (Unit Tests)', () => {
   it('should construct and validate Result.ok and Result.err envelopes', () => {

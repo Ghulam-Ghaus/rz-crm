@@ -8,8 +8,8 @@ import {
   CatalogService,
   InventoryService,
   UsersService,
-} from '@bakery/backend';
-import { StoreEntity, StockMovementEntity, StockLocationEntity, ItemEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, StockMovementEntity, StockLocationEntity, ItemEntity } from '@rz-crm/database';
 
 describe('Phase 8 — Multi-User RBAC & Live Stock Ledger Integration', () => {
   let tempDir: string;

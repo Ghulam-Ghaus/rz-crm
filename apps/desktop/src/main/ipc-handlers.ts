@@ -56,7 +56,7 @@ import {
   DisburseSalaryInputSchema,
   GetEmployeeStatementQuerySchema,
   UserSession,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 import {
   HealthService,
@@ -81,8 +81,8 @@ import {
   ExpensesService,
   PayrollService,
   INestApplicationContext,
-} from '@bakery/backend';
-import { generateUuid } from '@bakery/shared';
+} from '@rz-crm/backend';
+import { generateUuid } from '@rz-crm/shared';
 
 export function registerIpcHandlers(appContext: INestApplicationContext, databasePath: string): void {
   const healthService = appContext.get(HealthService);

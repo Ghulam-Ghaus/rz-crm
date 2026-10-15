@@ -5,8 +5,8 @@ import {
   ProductVariantEntity,
   ProductEntity,
   ItemEntity,
-} from '@bakery/database';
-import { ResolvedBarcodeResult } from '@bakery/contracts';
+} from '@rz-crm/database';
+import { ResolvedBarcodeResult } from '@rz-crm/contracts';
 
 @Injectable()
 export class BarcodeService {

@@ -5,7 +5,7 @@ import {
   ProductListItem,
   Supplier,
   Store,
-} from '@bakery/contracts';
+} from '@rz-crm/contracts';
 
 interface ProfitLossTabProps {
   store: Store | null;

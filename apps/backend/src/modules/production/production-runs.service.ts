@@ -11,15 +11,15 @@ import {
   StockMovementEntity,
   StockLocationEntity,
   InventoryLotEntity,
-} from '@bakery/database';
+} from '@rz-crm/database';
 import {
   ProductionRun,
   ProductionRunItem,
   CreateProductionRunInput,
   UpdateProductionRunStatusInput,
   CompleteProductionRunInput,
-} from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+} from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class ProductionRunsService {

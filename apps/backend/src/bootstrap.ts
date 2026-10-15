@@ -2,8 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { INestApplicationContext } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { DatabaseService } from './modules/database/database.service.js';
-import { DatabaseManager } from '@bakery/database';
-import { resolveAppPaths, ensureAppDirectories } from '@bakery/config';
+import { DatabaseManager } from '@rz-crm/database';
+import { resolveAppPaths, ensureAppDirectories } from '@rz-crm/config';
 
 export interface BackendBootstrapOptions {
   dbPath?: string;

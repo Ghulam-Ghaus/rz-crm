@@ -9,8 +9,8 @@ import {
   ShiftsService,
   PosSaleService,
   InventoryService,
-} from '@bakery/backend';
-import { StoreEntity, StockMovementEntity, ProductVariantEntity } from '@bakery/database';
+} from '@rz-crm/backend';
+import { StoreEntity, StockMovementEntity, ProductVariantEntity } from '@rz-crm/database';
 
 describe('Phase 3 — POS Sales & Cashier Shifts Integration', () => {
   let tempDir: string;

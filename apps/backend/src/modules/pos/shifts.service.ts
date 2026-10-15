@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
-import { ShiftEntity, CashTransactionEntity, SaleEntity, SaleItemEntity, StoreEntity } from '@bakery/database';
-import { Shift, OpenShiftInput, CloseShiftInput, ShiftReport } from '@bakery/contracts';
-import { nowUtcString } from '@bakery/shared';
+import { ShiftEntity, CashTransactionEntity, SaleEntity, SaleItemEntity, StoreEntity } from '@rz-crm/database';
+import { Shift, OpenShiftInput, CloseShiftInput, ShiftReport } from '@rz-crm/contracts';
+import { nowUtcString } from '@rz-crm/shared';
 
 @Injectable()
 export class ShiftsService {

@@ -23,24 +23,24 @@ importers:
 
   apps/backend:
     dependencies:
-      '@bakery/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@bakery/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@bakery/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@bakery/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@nestjs/common':
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
       '@nestjs/core':
         specifier: ^10.4.15
         version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(encoding@0.1.13)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@rz-crm/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@rz-crm/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@rz-crm/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@rz-crm/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -60,19 +60,19 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@bakery/backend':
+      '@rz-crm/backend':
         specifier: workspace:*
         version: link:../backend
-      '@bakery/config':
+      '@rz-crm/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@bakery/contracts':
+      '@rz-crm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@bakery/database':
+      '@rz-crm/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@bakery/shared':
+      '@rz-crm/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       better-sqlite3:
@@ -100,7 +100,7 @@ importers:
 
   apps/renderer:
     dependencies:
-      '@bakery/contracts':
+      '@rz-crm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       react:
@@ -128,10 +128,10 @@ importers:
 
   packages/config:
     dependencies:
-      '@bakery/contracts':
+      '@rz-crm/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@bakery/shared':
+      '@rz-crm/shared':
         specifier: workspace:*
         version: link:../shared
       zod:
@@ -157,13 +157,13 @@ importers:
 
   packages/database:
     dependencies:
-      '@bakery/config':
+      '@rz-crm/config':
         specifier: workspace:*
         version: link:../config
-      '@bakery/contracts':
+      '@rz-crm/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@bakery/shared':
+      '@rz-crm/shared':
         specifier: workspace:*
         version: link:../shared
       better-sqlite3:
@@ -194,19 +194,19 @@ importers:
 
   tests:
     dependencies:
-      '@bakery/backend':
+      '@rz-crm/backend':
         specifier: workspace:*
         version: link:../apps/backend
-      '@bakery/config':
+      '@rz-crm/config':
         specifier: workspace:*
         version: link:../packages/config
-      '@bakery/contracts':
+      '@rz-crm/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
-      '@bakery/database':
+      '@rz-crm/database':
         specifier: workspace:*
         version: link:../packages/database
-      '@bakery/shared':
+      '@rz-crm/shared':
         specifier: workspace:*
         version: link:../packages/shared
       better-sqlite3:
