@@ -11,6 +11,8 @@ import {
   StockBalanceItem,
   GetStockBalancesQuery,
   StockMovementLogItem,
+  StockLocationItem,
+  TransferStockInput,
 } from '@rz-crm/contracts';
 import { nowUtcString } from '@rz-crm/shared';
 
@@ -121,6 +123,8 @@ export class InventoryService {
   public async getStockBalances(query?: GetStockBalancesQuery): Promise<StockBalanceItem[]> {
     const ds = this.databaseService.getDataSource();
 
+    const locationFilter = query?.locationId ? `AND sm.location_id = ${Number(query.locationId)}` : '';
+
     const raw = await ds.query(`
       SELECT 
         i.id AS itemId,
@@ -128,6 +132,10 @@ export class InventoryService {
         i.name AS itemName,
         i.base_unit_code AS baseUnitCode,
         pv.sku AS sku,
+        COALESCE(pv.cost_minor_units, 0) AS costMinorUnits,
+        COALESCE(pv.price_minor_units, 0) AS priceMinorUnits,
+        COALESCE(pv.wholesale_price_minor_units, 0) AS wholesalePriceMinorUnits,
+        COALESCE(pv.reorder_point, 10) AS reorderPoint,
         b.barcode_value AS barcode,
         c.name AS categoryName,
         sl.id AS locationId,
@@ -138,7 +146,7 @@ export class InventoryService {
       LEFT JOIN products p ON p.id = pv.product_id
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN barcodes b ON b.target_id = pv.id AND b.target_type = 'variant' AND b.is_active = 1
-      LEFT JOIN stock_movements sm ON sm.item_id = i.id
+      LEFT JOIN stock_movements sm ON sm.item_id = i.id ${locationFilter}
       LEFT JOIN stock_locations sl ON sl.id = sm.location_id
       WHERE i.is_active = 1
       GROUP BY i.id
@@ -147,10 +155,17 @@ export class InventoryService {
 
     let items: StockBalanceItem[] = raw.map((r: any) => {
       const qty = Number(r.onHandQuantity) || 0;
+      const cost = Number(r.costMinorUnits) || 0;
+      const price = Number(r.priceMinorUnits) || 0;
+      const wholesale = Number(r.wholesalePriceMinorUnits) || 0;
+      const threshold = Number(r.reorderPoint) || 10;
+      const valuationCostMinorUnits = Math.round(qty * cost);
+      const valuationRetailMinorUnits = Math.round(qty * price);
+
       let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
       if (qty <= 0) {
         status = 'out_of_stock';
-      } else if (qty <= 10) {
+      } else if (qty <= threshold) {
         status = 'low_stock';
       }
 
@@ -165,7 +180,12 @@ export class InventoryService {
         locationName: r.locationName || 'Main Floor',
         onHandQuantity: qty,
         baseUnitCode: r.baseUnitCode,
-        lowStockThreshold: 10,
+        lowStockThreshold: threshold,
+        costMinorUnits: cost,
+        priceMinorUnits: price,
+        wholesalePriceMinorUnits: wholesale,
+        valuationCostMinorUnits,
+        valuationRetailMinorUnits,
         status,
       };
     });
@@ -292,6 +312,109 @@ export class InventoryService {
       await stockMovementRepo.save(movement);
 
       return { success: true, variance };
+    });
+  }
+
+  public async getLocations(storeId: number): Promise<StockLocationItem[]> {
+    const ds = this.databaseService.getDataSource();
+    const repo = ds.getRepository(StockLocationEntity);
+    const rows = await repo.find({
+      where: { storeId, isActive: true },
+      order: { name: 'ASC' },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      storeId: r.storeId,
+      code: r.code,
+      name: r.name,
+      locationType: r.locationType,
+      isActive: r.isActive,
+    }));
+  }
+
+  public async transferStock(input: TransferStockInput): Promise<{ success: boolean; movementIds: number[] }> {
+    if (input.sourceLocationId === input.destinationLocationId) {
+      throw new Error('Source and destination locations cannot be identical');
+    }
+    if (input.quantity <= 0) {
+      throw new Error('Transfer quantity must be positive');
+    }
+
+    const ds = this.databaseService.getDataSource();
+    return await ds.transaction(async (manager) => {
+      const movementRepo = manager.getRepository(StockMovementEntity);
+      const locationRepo = manager.getRepository(StockLocationEntity);
+
+      const [sourceLoc, destLoc] = await Promise.all([
+        locationRepo.findOne({ where: { id: input.sourceLocationId, storeId: input.storeId, isActive: true } }),
+        locationRepo.findOne({ where: { id: input.destinationLocationId, storeId: input.storeId, isActive: true } }),
+      ]);
+
+      if (!sourceLoc) {
+        throw new Error(`Source location with ID ${input.sourceLocationId} not found or inactive`);
+      }
+      if (!destLoc) {
+        throw new Error(`Destination location with ID ${input.destinationLocationId} not found or inactive`);
+      }
+
+      // Query current balance at source location
+      const sourceBalanceRaw = await movementRepo
+        .createQueryBuilder('sm')
+        .select('COALESCE(SUM(sm.signed_base_quantity), 0)', 'total')
+        .where('sm.item_id = :itemId AND sm.location_id = :locId', {
+          itemId: input.itemId,
+          locId: input.sourceLocationId,
+        })
+        .getRawOne();
+
+      const sourceBalance = Number(sourceBalanceRaw?.total || 0);
+      if (sourceBalance < input.quantity) {
+        throw new Error(
+          `Insufficient stock at ${sourceLoc.name}. Available: ${sourceBalance}, Requested transfer: ${input.quantity}`
+        );
+      }
+
+      const now = nowUtcString();
+      const transferGroupId = `XFER-${Date.now()}`;
+
+      // 1. Dual-entry: Outflow from source location
+      const outMovement = movementRepo.create({
+        storeId: input.storeId,
+        itemId: input.itemId,
+        locationId: input.sourceLocationId,
+        signedBaseQuantity: -input.quantity,
+        movementType: 'TRANSFER_OUT',
+        sourceType: 'STOCK_TRANSFER',
+        sourceId: transferGroupId,
+        sourceLineId: input.notes ?? `Transfer to ${destLoc.name}`,
+        costPerUnitMinorUnits: null,
+        actorId: input.actorId ? String(input.actorId) : 'admin',
+        idempotencyKey: `${transferGroupId}-OUT-${input.itemId}`,
+        createdAtUtc: now,
+      });
+      await movementRepo.save(outMovement);
+
+      // 2. Dual-entry: Inflow to destination location
+      const inMovement = movementRepo.create({
+        storeId: input.storeId,
+        itemId: input.itemId,
+        locationId: input.destinationLocationId,
+        signedBaseQuantity: input.quantity,
+        movementType: 'TRANSFER_IN',
+        sourceType: 'STOCK_TRANSFER',
+        sourceId: transferGroupId,
+        sourceLineId: input.notes ?? `Transfer from ${sourceLoc.name}`,
+        costPerUnitMinorUnits: null,
+        actorId: input.actorId ? String(input.actorId) : 'admin',
+        idempotencyKey: `${transferGroupId}-IN-${input.itemId}`,
+        createdAtUtc: now,
+      });
+      await movementRepo.save(inMovement);
+
+      return {
+        success: true,
+        movementIds: [outMovement.id, inMovement.id],
+      };
     });
   }
 }

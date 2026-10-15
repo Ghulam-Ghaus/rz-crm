@@ -32,6 +32,12 @@ export class SupplierEntity {
   @Column({ name: 'payment_terms_days', type: 'integer', default: 0 })
   paymentTermsDays!: number;
 
+  @Column({ name: 'credit_limit_minor_units', type: 'integer', default: 0 })
+  creditLimitMinorUnits!: number;
+
+  @Column({ name: 'outstanding_balance_minor_units', type: 'integer', default: 0 })
+  outstandingBalanceMinorUnits!: number;
+
   @Column({ name: 'is_active', type: 'integer', default: 1 })
   isActive!: number;
 

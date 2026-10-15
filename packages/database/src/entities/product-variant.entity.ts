@@ -34,6 +34,12 @@ export class ProductVariantEntity {
   @Column({ name: 'cost_minor_units', type: 'integer', default: 0 })
   costMinorUnits!: number;
 
+  @Column({ name: 'wholesale_price_minor_units', type: 'integer', default: 0 })
+  wholesalePriceMinorUnits!: number;
+
+  @Column({ name: 'reorder_point', type: 'real', default: 10 })
+  reorderPoint!: number;
+
   @Column({ name: 'currency_code', type: 'varchar', length: 3, default: 'PKR' })
   currencyCode!: string;
 

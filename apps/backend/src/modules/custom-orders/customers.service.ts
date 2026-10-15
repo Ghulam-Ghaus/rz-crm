@@ -17,7 +17,7 @@ export class CustomersService {
       const customers = await repo.find({
         where: { storeId },
         order: { createdAtUtc: 'DESC' },
-        take: 30,
+        take: 50,
       });
       return customers.map(this.mapToDto);
     }
@@ -25,11 +25,12 @@ export class CustomersService {
     const customers = await repo
       .createQueryBuilder('c')
       .where('c.store_id = :storeId', { storeId })
-      .andWhere('(LOWER(c.name) LIKE :q OR LOWER(c.phone) LIKE :q OR LOWER(c.code) LIKE :q)', {
-        q: `%${trimmed}%`,
-      })
+      .andWhere(
+        '(LOWER(c.name) LIKE :q OR LOWER(c.phone) LIKE :q OR LOWER(c.code) LIKE :q OR LOWER(COALESCE(c.company_name, "")) LIKE :q OR LOWER(COALESCE(c.tax_number, "")) LIKE :q)',
+        { q: `%${trimmed}%` }
+      )
       .orderBy('c.created_at_utc', 'DESC')
-      .take(30)
+      .take(50)
       .getMany();
 
     return customers.map(this.mapToDto);
@@ -55,6 +56,12 @@ export class CustomersService {
       email: input.email?.trim() || null,
       address: input.address?.trim() || null,
       notes: input.notes?.trim() || null,
+      companyName: input.companyName?.trim() || null,
+      taxNumber: input.taxNumber?.trim() || null,
+      creditLimitMinorUnits: input.creditLimitMinorUnits ?? 0,
+      paymentTermsDays: input.paymentTermsDays ?? 0,
+      outstandingBalanceMinorUnits: 0,
+      customerType: input.customerType || 'retail',
       createdAtUtc: now,
       updatedAtUtc: now,
     });
@@ -81,6 +88,12 @@ export class CustomersService {
       email: entity.email,
       address: entity.address,
       notes: entity.notes,
+      companyName: entity.companyName,
+      taxNumber: entity.taxNumber,
+      creditLimitMinorUnits: entity.creditLimitMinorUnits,
+      paymentTermsDays: entity.paymentTermsDays,
+      outstandingBalanceMinorUnits: entity.outstandingBalanceMinorUnits,
+      customerType: (entity.customerType as 'retail' | 'wholesale') || 'retail',
       createdAtUtc: entity.createdAtUtc,
       updatedAtUtc: entity.updatedAtUtc,
     };

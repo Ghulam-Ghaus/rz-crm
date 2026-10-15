@@ -43,6 +43,10 @@ export class GoodsReceivingService {
     const pos = await poRepo.find({ where: { storeId } });
     const poMap = new Map(pos.map((p) => [p.id, p.poNumber]));
 
+    const locationRepo = dataSource.getRepository(StockLocationEntity);
+    const locations = await locationRepo.find({ where: { storeId } });
+    const locationMap = new Map(locations.map((l) => [l.id, l.name]));
+
     const payments = await paymentRepo.find({ where: { storeId } });
 
     // Group GRNs and Payments by supplier for accurate explicit + FIFO advance matching
@@ -151,6 +155,8 @@ export class GoodsReceivingService {
         supplierInvoiceRef: grn.supplierInvoiceRef,
         receivedDateUtc: grn.receivedDateUtc,
         status: grn.status,
+        locationId: grn.locationId,
+        locationName: grn.locationId ? (locationMap.get(grn.locationId) || 'Central Warehouse') : 'Central Warehouse',
         totalAmountMinorUnits: grn.totalAmountMinorUnits,
         paidAmountMinorUnits: match.paidAmount,
         balanceDueMinorUnits: match.balanceDue,
@@ -174,12 +180,14 @@ export class GoodsReceivingService {
     const paymentRepo = dataSource.getRepository(SupplierPaymentEntity);
     const variantRepo = dataSource.getRepository(ProductVariantEntity);
     const productRepo = dataSource.getRepository(ProductEntity);
+    const locationRepo = dataSource.getRepository(StockLocationEntity);
 
     const grn = await grnRepo.findOne({ where: { id: grnId } });
     if (!grn) throw new Error(`Goods receipt #${grnId} not found`);
 
     const supplier = await supplierRepo.findOne({ where: { id: grn.supplierId } });
     const po = grn.purchaseOrderId ? await poRepo.findOne({ where: { id: grn.purchaseOrderId } }) : null;
+    const location = grn.locationId ? await locationRepo.findOne({ where: { id: grn.locationId } }) : null;
     const rawLines = await lineRepo.find({ where: { goodsReceiptId: grn.id } });
 
     // Calculate payments for this supplier using the same FIFO logic
@@ -285,6 +293,8 @@ export class GoodsReceivingService {
       poNumber: po?.poNumber ?? null,
       supplierId: grn.supplierId,
       supplierName: supplier?.name ?? 'Unknown Supplier',
+      locationId: grn.locationId ?? undefined,
+      locationName: location?.name ?? undefined,
       supplierInvoiceRef: grn.supplierInvoiceRef,
       receivedDateUtc: grn.receivedDateUtc,
       status: grn.status,
@@ -321,17 +331,26 @@ export class GoodsReceivingService {
       const supplier = await supplierRepo.findOne({ where: { id: input.supplierId } });
       if (!supplier) throw new Error(`Supplier #${input.supplierId} not found`);
 
-      // 2. Default Location for Stock
-      let location = await locationRepo.findOne({ where: { storeId: input.storeId, code: 'MAIN_STORAGE' } });
+      // 2. Stock Location Selection (WH-MAIN Central Warehouse by default, or SR-MAIN Showroom, or custom)
+      let location: StockLocationEntity | null = null;
+      if (input.stockLocationId) {
+        location = await locationRepo.findOne({ where: { id: input.stockLocationId } });
+      }
+      if (!location) {
+        location = await locationRepo.findOne({ where: { storeId: input.storeId, code: 'WH-MAIN' } });
+      }
+      if (!location) {
+        location = await locationRepo.findOne({ where: { storeId: input.storeId, code: 'MAIN_STORAGE' } });
+      }
       if (!location) {
         location = await locationRepo.findOne({ where: { storeId: input.storeId } });
       }
       if (!location) {
         location = locationRepo.create({
           storeId: input.storeId,
-          code: 'MAIN_STORAGE',
-          name: 'Main Storage Room',
-          locationType: 'store',
+          code: 'WH-MAIN',
+          name: 'Central Warehouse (WH-MAIN)',
+          locationType: 'warehouse',
           isActive: true,
           createdAtUtc: now,
           updatedAtUtc: now,
@@ -359,9 +378,11 @@ export class GoodsReceivingService {
         grnNumber,
         purchaseOrderId: input.purchaseOrderId ?? null,
         supplierId: input.supplierId,
+        locationId: location.id,
         supplierInvoiceRef: input.supplierInvoiceRef.trim(),
         receivedDateUtc: input.receivedDateUtc ?? now,
         status: 'POSTED',
+        paymentStatus: 'UNPAID',
         totalAmountMinorUnits: totalAmount,
         currencyCode: 'PKR',
         notes: input.notes ?? null,
@@ -491,6 +512,11 @@ export class GoodsReceivingService {
         }
       }
 
+      // 11. Update Supplier Outstanding Balance
+      supplier.outstandingBalanceMinorUnits = (supplier.outstandingBalanceMinorUnits || 0) + totalAmount;
+      supplier.updatedAtUtc = now;
+      await supplierRepo.save(supplier);
+
       return {
         id: savedGrn.id,
         storeId: savedGrn.storeId,
@@ -498,10 +524,15 @@ export class GoodsReceivingService {
         purchaseOrderId: savedGrn.purchaseOrderId,
         supplierId: savedGrn.supplierId,
         supplierName: supplier.name,
+        locationId: location.id,
+        locationName: location.name,
         supplierInvoiceRef: savedGrn.supplierInvoiceRef,
         receivedDateUtc: savedGrn.receivedDateUtc,
         status: savedGrn.status,
+        paymentStatus: 'UNPAID',
         totalAmountMinorUnits: savedGrn.totalAmountMinorUnits,
+        paidAmountMinorUnits: 0,
+        balanceDueMinorUnits: savedGrn.totalAmountMinorUnits,
         currencyCode: savedGrn.currencyCode,
         notes: savedGrn.notes,
         receivedBy: savedGrn.receivedBy,

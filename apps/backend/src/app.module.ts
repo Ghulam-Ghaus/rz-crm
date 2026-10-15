@@ -13,6 +13,7 @@ import { CustomOrdersModule } from './modules/custom-orders/custom-orders.module
 import { BackupModule } from './modules/backup/backup.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { ExpensesModule } from './modules/expenses/expenses.module.js';
+import { ReturnsModule } from './modules/returns/returns.module.js';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module.js';
     BackupModule,
     UsersModule,
     ExpensesModule,
+    ReturnsModule,
   ],
 })
 

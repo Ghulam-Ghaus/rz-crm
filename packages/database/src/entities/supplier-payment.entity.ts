@@ -29,6 +29,12 @@ export class SupplierPaymentEntity {
   @Column({ name: 'reference', type: 'varchar', length: 100, nullable: true })
   reference!: string | null;
 
+  @Column({ name: 'bank_name', type: 'varchar', length: 100, nullable: true })
+  bankName!: string | null;
+
+  @Column({ name: 'cheque_date', type: 'varchar', length: 35, nullable: true })
+  chequeDate!: string | null;
+
   @Column({ name: 'notes', type: 'text', nullable: true })
   notes!: string | null;
 

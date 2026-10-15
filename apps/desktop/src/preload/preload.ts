@@ -26,6 +26,7 @@ import {
   CheckoutSaleInput,
   SaleReceipt,
   SaleSummary,
+  RecordSalePaymentInput,
   Supplier,
   CreateSupplierInput,
   SupplierBalanceSummary,
@@ -73,6 +74,8 @@ import {
   StockBalanceItem,
   GetStockBalancesQuery,
   StockMovementLogItem,
+  StockLocationItem,
+  TransferStockInput,
   ExpenseCategory,
   CreateExpenseCategoryInput,
   Expense,
@@ -89,6 +92,10 @@ import {
   MonthlyPayrollSheetResponse,
   EmployeeMonthlyStatementResponse,
   GetEmployeeStatementQuery,
+  SalesReturn,
+  PostSalesReturnInput,
+  PurchaseReturn,
+  PostPurchaseReturnInput,
 } from '@rz-crm/contracts';
 
 
@@ -193,6 +200,12 @@ const api: BakeryDesktopApi = {
     async adjustStock(input: { storeId: number; itemId: number; newQuantity: number; reason: string; actorId?: number }): Promise<Result<{ success: boolean; variance: number }>> {
       return ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_STOCK_ADJUST, input);
     },
+    async getLocations(storeId: number): Promise<Result<StockLocationItem[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_LOCATIONS_GET, storeId);
+    },
+    async transferStock(input: TransferStockInput): Promise<Result<{ success: boolean; movementIds: number[] }>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_TRANSFER_STOCK, input);
+    },
   },
   pos: {
     async getActiveShift(storeId: number): Promise<Result<Shift | null>> {
@@ -221,6 +234,9 @@ const api: BakeryDesktopApi = {
     },
     async getSaleReceipt(saleId: number): Promise<Result<SaleReceipt>> {
       return ipcRenderer.invoke(IPC_CHANNELS.POS_SALE_GET_RECEIPT, saleId);
+    },
+    async recordSalePayment(input: RecordSalePaymentInput): Promise<Result<{ success: boolean; balanceDueMinorUnits: number; paymentStatus: string }>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.POS_SALE_RECORD_PAYMENT, input);
     },
     async printReceiptSilent(input: { html: string; printerName?: string }): Promise<Result<{ printed: boolean; printerName: string }>> {
       return ipcRenderer.invoke(IPC_CHANNELS.POS_PRINT_RECEIPT_SILENT, input);
@@ -400,6 +416,26 @@ const api: BakeryDesktopApi = {
     },
     async getEmployeeStatement(query: GetEmployeeStatementQuery): Promise<Result<EmployeeMonthlyStatementResponse>> {
       return ipcRenderer.invoke(IPC_CHANNELS.PAYROLL_EMPLOYEE_STATEMENT, query);
+    },
+  },
+  returns: {
+    async listSalesReturns(storeId: number): Promise<Result<SalesReturn[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_SALES_LIST, storeId);
+    },
+    async createSalesReturn(input: PostSalesReturnInput): Promise<Result<SalesReturn>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_SALES_CREATE, input);
+    },
+    async getSalesReturn(id: number): Promise<Result<SalesReturn>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_SALES_GET, id);
+    },
+    async listPurchaseReturns(storeId: number): Promise<Result<PurchaseReturn[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_PURCHASE_LIST, storeId);
+    },
+    async createPurchaseReturn(input: PostPurchaseReturnInput): Promise<Result<PurchaseReturn>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_PURCHASE_CREATE, input);
+    },
+    async getPurchaseReturn(id: number): Promise<Result<PurchaseReturn>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_PURCHASE_GET, id);
     },
   },
   reports: {

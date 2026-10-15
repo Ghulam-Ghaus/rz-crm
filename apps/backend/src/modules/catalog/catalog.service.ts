@@ -115,6 +115,8 @@ export class CatalogService {
         sku: primaryVariant.sku,
         priceMinorUnits: primaryVariant.priceMinorUnits,
         costMinorUnits: primaryVariant.costMinorUnits ?? 0,
+        wholesalePriceMinorUnits: primaryVariant.wholesalePriceMinorUnits ?? 0,
+        reorderPoint: primaryVariant.reorderPoint ?? 10,
         currencyCode: primaryVariant.currencyCode,
         barcode: barcodeRecord ? barcodeRecord.barcodeValue : null,
         baseUnitCode,
@@ -183,6 +185,8 @@ export class CatalogService {
         name: 'Standard',
         priceMinorUnits: input.priceMinorUnits,
         costMinorUnits: input.costMinorUnits ?? 0,
+        wholesalePriceMinorUnits: input.wholesalePriceMinorUnits ?? 0,
+        reorderPoint: input.reorderPoint ?? 10,
         currencyCode: input.currencyCode ?? 'PKR',
         taxClassId: null,
         isActive: true,
@@ -224,6 +228,8 @@ export class CatalogService {
         sku: variant.sku,
         priceMinorUnits: variant.priceMinorUnits,
         costMinorUnits: variant.costMinorUnits,
+        wholesalePriceMinorUnits: variant.wholesalePriceMinorUnits,
+        reorderPoint: variant.reorderPoint,
         currencyCode: variant.currencyCode,
         barcode: savedBarcode,
         baseUnitCode: item.baseUnitCode,
@@ -273,6 +279,12 @@ export class CatalogService {
       }
       if (input.costMinorUnits !== undefined) {
         variant.costMinorUnits = input.costMinorUnits;
+      }
+      if (input.wholesalePriceMinorUnits !== undefined) {
+        variant.wholesalePriceMinorUnits = input.wholesalePriceMinorUnits;
+      }
+      if (input.reorderPoint !== undefined) {
+        variant.reorderPoint = input.reorderPoint;
       }
       variant.updatedAtUtc = now;
       await variantRepo.save(variant);
@@ -334,6 +346,8 @@ export class CatalogService {
         sku: variant.sku,
         priceMinorUnits: variant.priceMinorUnits,
         costMinorUnits: variant.costMinorUnits,
+        wholesalePriceMinorUnits: variant.wholesalePriceMinorUnits,
+        reorderPoint: variant.reorderPoint,
         currencyCode: variant.currencyCode,
         barcode: savedBarcode,
         baseUnitCode,

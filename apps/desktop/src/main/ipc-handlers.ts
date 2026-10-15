@@ -18,6 +18,7 @@ import {
   OpenShiftInputSchema,
   CloseShiftInputSchema,
   CheckoutSaleInputSchema,
+  RecordSalePaymentInputSchema,
   ShiftReport,
   CreateSupplierInputSchema,
   CreateSupplierPaymentInputSchema,
@@ -45,6 +46,7 @@ import {
   UpdateRoleInputSchema,
   DeleteRoleInputSchema,
   GetStockBalancesQuerySchema,
+  TransferStockInputSchema,
   CreateExpenseCategoryInputSchema,
 
   CreateExpenseInputSchema,
@@ -55,6 +57,8 @@ import {
   DeleteSalaryAdvanceInputSchema,
   DisburseSalaryInputSchema,
   GetEmployeeStatementQuerySchema,
+  PostSalesReturnInputSchema,
+  PostPurchaseReturnInputSchema,
   UserSession,
 } from '@rz-crm/contracts';
 
@@ -80,6 +84,8 @@ import {
   UsersService,
   ExpensesService,
   PayrollService,
+  SalesReturnsService,
+  PurchaseReturnsService,
   INestApplicationContext,
 } from '@rz-crm/backend';
 import { generateUuid } from '@rz-crm/shared';
@@ -89,6 +95,8 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
   const usersService = appContext.get(UsersService);
   const expensesService = appContext.get(ExpensesService);
   const payrollService = appContext.get(PayrollService);
+  const salesReturnsService = appContext.get(SalesReturnsService);
+  const purchaseReturnsService = appContext.get(PurchaseReturnsService);
   let activeSession: UserSession | null = null;
 
   const storeSettingsService = appContext.get(StoreSettingsService);
@@ -696,6 +704,46 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
     },
   );
 
+  // 11e. Stock Locations List
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_LOCATIONS_GET, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const locations = await inventoryService.getLocations(storeId || 1);
+      return Result.ok(locations);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to fetch stock locations',
+        correlationId,
+      });
+    }
+  });
+
+  // 11f. Stock Transfer Dual-Movement
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_TRANSFER_STOCK, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = TransferStockInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid stock transfer payload',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+
+      const res = await inventoryService.transferStock(parsed.data);
+      return Result.ok(res);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.CONFLICT,
+        message: err instanceof Error ? err.message : 'Failed to transfer stock',
+        correlationId,
+      });
+    }
+  });
+
   // 12. POS Active Shift Get
   ipcMain.handle(IPC_CHANNELS.POS_SHIFT_GET_ACTIVE, async (_event, storeId: number) => {
     const correlationId = generateUuid();
@@ -811,6 +859,30 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
       return Result.err({
         code: ErrorCode.NOT_FOUND,
         message: err instanceof Error ? err.message : 'Receipt not found',
+        correlationId,
+      });
+    }
+  });
+
+  // 17b. POS Record Subsequent Payment (Partial/Credit Invoices)
+  ipcMain.handle(IPC_CHANNELS.POS_SALE_RECORD_PAYMENT, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = RecordSalePaymentInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid payment payload',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const res = await posSaleService.recordSalePayment(parsed.data);
+      return Result.ok(res);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.CONFLICT,
+        message: err instanceof Error ? err.message : 'Failed to record payment',
         correlationId,
       });
     }
@@ -2220,6 +2292,124 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
       return Result.err({
         code: ErrorCode.DATABASE_ERROR,
         message: err instanceof Error ? err.message : 'Failed to generate employee statement',
+        correlationId,
+      });
+    }
+  });
+
+  // ==========================================
+  // RETURNS & COMMERCIAL REVERSALS
+  // ==========================================
+
+  // List Sales Returns (Credit Notes)
+  ipcMain.handle(IPC_CHANNELS.RETURNS_SALES_LIST, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const returns = await salesReturnsService.getSalesReturns(storeId);
+      return Result.ok(returns);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list sales returns',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Sales Return (Credit Note & Restock/Refund)
+  ipcMain.handle(IPC_CHANNELS.RETURNS_SALES_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = PostSalesReturnInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const salesReturn = await salesReturnsService.postSalesReturn(storeId, parsed.data);
+      return Result.ok(salesReturn);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to process sales return',
+        correlationId,
+      });
+    }
+  });
+
+  // Get Sales Return Detail
+  ipcMain.handle(IPC_CHANNELS.RETURNS_SALES_GET, async (_event, id: number) => {
+    const correlationId = generateUuid();
+    try {
+      const ret = await salesReturnsService.getSalesReturnDetail(id);
+      return Result.ok(ret);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to retrieve sales return detail',
+        correlationId,
+      });
+    }
+  });
+
+  // List Purchase Returns (Debit Notes)
+  ipcMain.handle(IPC_CHANNELS.RETURNS_PURCHASE_LIST, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const returns = await purchaseReturnsService.getPurchaseReturns(storeId);
+      return Result.ok(returns);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list purchase returns',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Purchase Return (Debit Note & Stock Reduction)
+  ipcMain.handle(IPC_CHANNELS.RETURNS_PURCHASE_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = PostPurchaseReturnInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const purchaseReturn = await purchaseReturnsService.postPurchaseReturn(storeId, parsed.data);
+      return Result.ok(purchaseReturn);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to process purchase return',
+        correlationId,
+      });
+    }
+  });
+
+  // Get Purchase Return Detail
+  ipcMain.handle(IPC_CHANNELS.RETURNS_PURCHASE_GET, async (_event, id: number) => {
+    const correlationId = generateUuid();
+    try {
+      const ret = await purchaseReturnsService.getPurchaseReturnDetail(id);
+      return Result.ok(ret);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to retrieve purchase return detail',
         correlationId,
       });
     }

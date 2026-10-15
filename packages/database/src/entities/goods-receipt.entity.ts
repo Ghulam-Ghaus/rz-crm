@@ -23,8 +23,14 @@ export class GoodsReceiptEntity {
   @Column({ name: 'received_date_utc', type: 'varchar', length: 35 })
   receivedDateUtc!: string;
 
+  @Column({ name: 'location_id', type: 'integer', nullable: true })
+  locationId!: number | null;
+
   @Column({ type: 'varchar', length: 20, default: 'POSTED' })
   status!: 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+  @Column({ name: 'payment_status', type: 'varchar', length: 20, default: 'UNPAID' })
+  paymentStatus!: 'PAID' | 'PARTIAL' | 'UNPAID';
 
   @Column({ name: 'total_amount_minor_units', type: 'integer', default: 0 })
   totalAmountMinorUnits!: number;

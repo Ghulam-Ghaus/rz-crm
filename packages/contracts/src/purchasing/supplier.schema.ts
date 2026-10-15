@@ -11,6 +11,8 @@ export const SupplierSchema = z.object({
   taxNumber: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
   paymentTermsDays: z.number().int().nonnegative().default(0),
+  creditLimitMinorUnits: z.number().int().nonnegative().default(0),
+  outstandingBalanceMinorUnits: z.number().int().default(0),
   isActive: z.number().int().default(1),
   createdAtUtc: z.string(),
   updatedAtUtc: z.string(),
@@ -27,7 +29,8 @@ export const CreateSupplierInputSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
   taxNumber: z.string().max(50).optional(),
   address: z.string().optional(),
-  paymentTermsDays: z.number().int().nonnegative().optional().default(0),
+  paymentTermsDays: z.number().int().nonnegative().optional(),
+  creditLimitMinorUnits: z.number().int().nonnegative().optional(),
 });
 
 export type CreateSupplierInput = z.infer<typeof CreateSupplierInputSchema>;
@@ -55,6 +58,8 @@ export const SupplierPaymentSchema = z.object({
   currencyCode: z.string().default('PKR'),
   paymentMethod: z.string(),
   reference: z.string().nullable().optional(),
+  bankName: z.string().nullable().optional(),
+  chequeDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   paidBy: z.string().nullable().optional(),
   createdAtUtc: z.string(),
@@ -70,6 +75,9 @@ export const CreateSupplierPaymentInputSchema = z.object({
   paymentMethod: z.enum(['CASH', 'BANK_TRANSFER', 'CHEQUE', 'ONLINE_WALLET', 'ADVANCE_ADJUSTMENT', 'OTHER']).default('CASH'),
   paymentDateUtc: z.string().optional(),
   reference: z.string().max(100).optional(),
+  bankName: z.string().max(100).optional(),
+  chequeDate: z.string().optional(),
+  grnId: z.number().int().positive().optional(),
   notes: z.string().max(500).optional(),
   paidBy: z.string().optional(),
 });

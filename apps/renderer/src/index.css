@@ -685,9 +685,13 @@ body {
     visibility: hidden;
   }
 
-  /* Make ONLY the printable receipt and its children visible */
+  /* Make ONLY the printable receipt, GRN slip or ledger visible */
   #printable-sale-receipt,
-  #printable-sale-receipt * {
+  #printable-sale-receipt *,
+  #printable-grn-slip,
+  #printable-grn-slip *,
+  #printable-supplier-ledger,
+  #printable-supplier-ledger * {
     visibility: visible !important;
   }
 
@@ -706,9 +710,27 @@ body {
     display: block !important;
   }
 
-  #printable-sale-receipt * {
+  /* GRN Slip & Supplier Ledger Printable Document Layout */
+  #printable-grn-slip,
+  #printable-supplier-ledger {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 8mm !important;
     color: #000000 !important;
-    border-color: #000000 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    display: block !important;
+  }
+
+  #printable-sale-receipt *,
+  #printable-grn-slip *,
+  #printable-supplier-ledger * {
+    color: #000000 !important;
+    border-color: #cbd5e1 !important;
     background: transparent !important;
     box-shadow: none !important;
   }

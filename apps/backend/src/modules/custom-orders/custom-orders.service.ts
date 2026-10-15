@@ -299,6 +299,12 @@ export class CustomOrdersService {
             email: customer.email,
             address: customer.address,
             notes: customer.notes,
+            companyName: customer.companyName,
+            taxNumber: customer.taxNumber,
+            creditLimitMinorUnits: customer.creditLimitMinorUnits ?? 0,
+            paymentTermsDays: customer.paymentTermsDays ?? 0,
+            outstandingBalanceMinorUnits: customer.outstandingBalanceMinorUnits ?? 0,
+            customerType: (customer.customerType as 'retail' | 'wholesale') || 'retail',
             createdAtUtc: customer.createdAtUtc,
             updatedAtUtc: customer.updatedAtUtc,
           }

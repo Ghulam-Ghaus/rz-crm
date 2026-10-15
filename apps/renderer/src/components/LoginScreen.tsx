@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { User, UserSession } from '@rz-crm/contracts';
-import { MezaanLogo } from './MezaanLogo.js';
+import { RzLogo } from './RzLogo.js';
 
 interface LoginScreenProps {
   storeName?: string;
@@ -153,147 +153,116 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ storeName: _storeName,
           overflow: 'hidden',
         }}
       >
-        {/* LEFT COLUMN: Clean Brand Showcase with Standalone Logo & Clean Spacing */}
+        {/* LEFT COLUMN: Modern RZ Enterprises CRM Brand Showcase */}
         <div
           style={{
-            background: 'linear-gradient(165deg, #241107 0%, #341608 50%, #1a0b04 100%)',
+            background: 'linear-gradient(165deg, #090d16 0%, #0f172a 45%, #1e1b4b 100%)',
             color: '#ffffff',
             padding: '28px 24px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            borderRight: '2px solid #5a2e12',
+            borderRight: '1px solid rgba(99, 102, 241, 0.25)',
             position: 'relative',
           }}
         >
           {/* Top: Logo Emblem & Title */}
           <div style={{ textAlign: 'center' }}>
-            {/* Standalone Circular Logo from Photo */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-              <MezaanLogo size={105} theme="dark" />
+            {/* Standalone Modern RZ Logo */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+              <RzLogo size={100} theme="dark" />
             </div>
 
-            {/* Urdu Title */}
+            {/* Enterprise Title */}
             <h1
               style={{
-                fontFamily: "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', serif",
-                fontSize: '28px',
-                fontWeight: 700,
-                color: '#fbbf24',
+                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontSize: '26px',
+                fontWeight: 800,
+                color: '#f8fafc',
                 margin: 0,
-                lineHeight: 1.8,
-                padding: '4px 0',
-                textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                letterSpacing: '1.2px',
+                lineHeight: 1.2,
+                textTransform: 'uppercase',
               }}
             >
-              میزان سویٹس اینڈ بیکرز
+              RZ ENTERPRISES
             </h1>
 
-            {/* English Title */}
-            <div
-              style={{
-                fontSize: '12px',
-                fontWeight: 800,
-                letterSpacing: '1.8px',
-                color: '#fed7aa',
-                textTransform: 'uppercase',
-                marginTop: '2px',
-              }}
-            >
-              MEZAAN SWEETS & BAKERS
-            </div>
-
-            {/* Taglines with proper breathing room */}
-            <div
-              style={{
-                fontFamily: "'Noto Nastaliq Urdu', serif",
-                fontSize: '14px',
-                color: '#fef08a',
-                marginTop: '10px',
-              }}
-            >
-              تازہ اور معیاری مٹھائیوں کا مرکز
-            </div>
-
-            <div
-              style={{
-                fontFamily: "'Noto Nastaliq Urdu', serif",
-                fontSize: '12px',
-                color: '#fdba74',
-                fontStyle: 'italic',
-                marginTop: '4px',
-              }}
-            >
-              "ذائقہ ہمارا، پہچان آپ کی"
-            </div>
-          </div>
-
-          {/* Center Divider */}
-          <div
-            style={{
-              height: '1px',
-              background: 'linear-gradient(90deg, transparent, rgba(217, 119, 6, 0.4), transparent)',
-              margin: '10px 0',
-            }}
-          />
-
-          {/* Bottom Location & Contact Summary */}
-          <div
-            style={{
-              background: 'rgba(0, 0, 0, 0.35)',
-              borderRadius: '12px',
-              border: '1px solid rgba(217, 119, 6, 0.35)',
-              padding: '12px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            {/* Address */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '14px' }}>📍</span>
-              <strong style={{ fontFamily: "'Noto Nastaliq Urdu', serif", fontSize: '13px', color: '#fde68a' }}>
-                چک نمبر 24 ج ب لاہوریاں
-              </strong>
-            </div>
-
-            {/* Event Order Notice */}
+            {/* Subtitle */}
             <div
               style={{
                 fontSize: '11px',
-                color: '#fed7aa',
-                textAlign: 'center',
-                lineHeight: 1.4,
-                fontFamily: "'Noto Nastaliq Urdu', serif",
+                fontWeight: 700,
+                letterSpacing: '2px',
+                color: '#818cf8',
+                textTransform: 'uppercase',
+                marginTop: '6px',
               }}
             >
-              شادی بیاہ، سالگرہ اور دیگر تقریبات کیلئے مال آرڈر پر بھی تیار کیا جاتا ہے
+              CRM &amp; Inventory Management
             </div>
 
-            {/* Direct Proprietor Phone Numbers */}
+            {/* Tagline */}
             <div
               style={{
-                borderTop: '1px solid rgba(217, 119, 6, 0.25)',
-                paddingTop: '8px',
-                marginTop: '4px',
-                display: 'flex',
-                justifyContent: 'space-around',
-                fontSize: '10.5px',
-                color: '#f8fafc',
+                fontSize: '13px',
+                color: '#94a3b8',
+                marginTop: '12px',
+                lineHeight: 1.4,
               }}
             >
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ color: '#fed7aa', display: 'block', fontSize: '9.5px', fontFamily: "'Noto Nastaliq Urdu', serif" }}>چوہدری تبسم</span>
-                <strong>0343-7763677</strong>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ color: '#fed7aa', display: 'block', fontSize: '9.5px', fontFamily: "'Noto Nastaliq Urdu', serif" }}>چوہدری عبدالرؤف</span>
-                <strong>0309-8809054</strong>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ color: '#fed7aa', display: 'block', fontSize: '9.5px', fontFamily: "'Noto Nastaliq Urdu', serif" }}>چوہدری محسن</span>
-                <strong>0301-6008625</strong>
-              </div>
+              Enterprise Trading, Sales Terminal &amp; Ledger Automation
+            </div>
+          </div>
+
+          {/* Center Divider with Glow */}
+          <div
+            style={{
+              height: '1px',
+              background: 'linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.5), transparent)',
+              margin: '12px 0',
+            }}
+          />
+
+          {/* Bottom Features & Security Summary */}
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.65)',
+              borderRadius: '12px',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontSize: '11px',
+                color: '#38bdf8',
+                fontWeight: 700,
+                letterSpacing: '0.8px',
+                textTransform: 'uppercase',
+              }}
+            >
+              <span>🔒</span>
+              <span>Local-First &bull; Verified Offline Security</span>
+            </div>
+
+            <div
+              style={{
+                fontSize: '10.5px',
+                color: '#cbd5e1',
+                textAlign: 'center',
+                lineHeight: 1.5,
+              }}
+            >
+              Sales &bull; Inventory &bull; Purchases &amp; GRN &bull; Returns &bull; Stakeholders
             </div>
           </div>
         </div>

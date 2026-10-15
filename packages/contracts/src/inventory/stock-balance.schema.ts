@@ -15,9 +15,35 @@ export const StockBalanceItemSchema = z.object({
   onHandQuantity: z.number(),
   baseUnitCode: z.string(),
   lowStockThreshold: z.number().default(10),
+  costMinorUnits: z.number().int().optional().default(0),
+  priceMinorUnits: z.number().int().optional().default(0),
+  wholesalePriceMinorUnits: z.number().int().optional().default(0),
+  valuationCostMinorUnits: z.number().int().optional().default(0),
+  valuationRetailMinorUnits: z.number().int().optional().default(0),
   status: StockBalanceStatusSchema,
 });
 export type StockBalanceItem = z.infer<typeof StockBalanceItemSchema>;
+
+export const StockLocationItemSchema = z.object({
+  id: z.number().int(),
+  storeId: z.number().int(),
+  code: z.string(),
+  name: z.string(),
+  locationType: z.string(),
+  isActive: z.boolean(),
+});
+export type StockLocationItem = z.infer<typeof StockLocationItemSchema>;
+
+export const TransferStockInputSchema = z.object({
+  storeId: z.number().int().default(1),
+  itemId: z.number().int().positive(),
+  sourceLocationId: z.number().int().positive(),
+  destinationLocationId: z.number().int().positive(),
+  quantity: z.number().positive(),
+  notes: z.string().optional(),
+  actorId: z.string().optional(),
+});
+export type TransferStockInput = z.infer<typeof TransferStockInputSchema>;
 
 export const GetStockBalancesQuerySchema = z.object({
   storeId: z.number().int().default(1),

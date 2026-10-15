@@ -20,6 +20,18 @@ export class SalePaymentEntity {
   @Column({ name: 'change_due_minor_units', type: 'integer', default: 0 })
   changeDueMinorUnits!: number;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  reference!: string | null;
+
+  @Column({ name: 'bank_name', type: 'varchar', length: 100, nullable: true })
+  bankName!: string | null;
+
+  @Column({ name: 'cheque_date', type: 'varchar', length: 10, nullable: true })
+  chequeDate!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes!: string | null;
+
   @Column({ type: 'varchar', length: 20, default: 'posted' })
   status!: string;
 

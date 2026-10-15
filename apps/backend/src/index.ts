@@ -28,6 +28,7 @@ export * from './modules/users/users.module.js';
 export * from './modules/expenses/expenses.service.js';
 export * from './modules/expenses/payroll.service.js';
 export * from './modules/expenses/expenses.module.js';
+export * from './modules/returns/index.js';
 export type { INestApplicationContext } from '@nestjs/common';
 
 

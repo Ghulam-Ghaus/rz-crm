@@ -44,4 +44,13 @@ export * from './expense.entity.js';
 export * from './staff-payroll-profile.entity.js';
 export * from './salary-advance.entity.js';
 export * from './salary-payment.entity.js';
-
+export * from './sales-return.entity.js';
+export * from './sales-return-line.entity.js';
+export * from './purchase-return.entity.js';
+export * from './purchase-return-line.entity.js';
+export * from './stakeholder.entity.js';
+export * from './stakeholder-equity.entity.js';
+export * from './stakeholder-transaction.entity.js';
+export * from './fiscal-period.entity.js';
+export * from './profit-distribution-run.entity.js';
+export * from './profit-distribution-line.entity.js';

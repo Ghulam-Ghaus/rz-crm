@@ -10,7 +10,7 @@ import {
   ConfirmOpeningStockInput,
 } from './inventory/opening-stock.schema.js';
 import { Shift, OpenShiftInput, CloseShiftInput, ShiftReport } from './pos/shifts.schema.js';
-import { CheckoutSaleInput, SaleReceipt, SaleSummary } from './pos/sales.schema.js';
+import { CheckoutSaleInput, SaleReceipt, SaleSummary, RecordSalePaymentInput } from './pos/sales.schema.js';
 import { GetProfitLossQuery, ProfitLossReport } from './pos/profit-loss.schema.js';
 import {
   Supplier,
@@ -87,7 +87,32 @@ import {
   StockBalanceItem,
   GetStockBalancesQuery,
   StockMovementLogItem,
+  StockLocationItem,
+  TransferStockInput,
 } from './inventory/stock-balance.schema.js';
+import {
+  SalesReturn,
+  PostSalesReturnInput,
+  PurchaseReturn,
+  PostPurchaseReturnInput,
+} from './returns/index.js';
+import {
+  Stakeholder,
+  CreateStakeholderInput,
+  UpdateStakeholderInput,
+  UpdateStakeholderEquityInput,
+  StakeholderTransaction,
+  CreateStakeholderTxInput,
+  FiscalPeriod,
+  CreateFiscalPeriodInput,
+  CloseFiscalPeriodInput,
+  ProfitDistributionRun,
+  CalculateDistributionInput,
+  CreateDistributionRunInput,
+  ApproveDistributionRunInput,
+  PayoutDistributionRunInput,
+  CompanyPnlSummary,
+} from './stakeholders/index.js';
 
 export const IPC_CHANNELS = {
   // Auth & Users
@@ -124,6 +149,8 @@ export const IPC_CHANNELS = {
   INVENTORY_STOCK_BALANCES_GET: 'inventory:stock_balances:get',
   INVENTORY_MOVEMENTS_GET: 'inventory:movements:get',
   INVENTORY_STOCK_ADJUST: 'inventory:stock:adjust',
+  INVENTORY_LOCATIONS_GET: 'inventory:locations:get',
+  INVENTORY_TRANSFER_STOCK: 'inventory:transfer_stock',
 
   // POS & Shifts
   POS_SHIFT_GET_ACTIVE: 'pos:shift:get_active',
@@ -133,6 +160,7 @@ export const IPC_CHANNELS = {
   POS_SHIFT_REPORT: 'pos:shift:report',
   POS_SHIFT_EXPORT_PDF: 'pos:shift:export_pdf',
   POS_SALE_CHECKOUT_CASH: 'pos:sale:checkout_cash',
+  POS_SALE_RECORD_PAYMENT: 'pos:sale:record_payment',
   POS_SALE_RECENT_LIST: 'pos:sale:recent_list',
   POS_SALE_GET_RECEIPT: 'pos:sale:get_receipt',
   POS_PRINT_RECEIPT_SILENT: 'pos:print_receipt_silent',
@@ -205,6 +233,31 @@ export const IPC_CHANNELS = {
   PAYROLL_PAYMENTS_LIST: 'payroll:payments:list',
   PAYROLL_EMPLOYEE_STATEMENT: 'payroll:employee_statement',
 
+  // Returns & Commercial Reversals
+  RETURNS_SALES_LIST: 'returns:sales:list',
+  RETURNS_SALES_CREATE: 'returns:sales:create',
+  RETURNS_SALES_GET: 'returns:sales:get',
+  RETURNS_PURCHASE_LIST: 'returns:purchase:list',
+  RETURNS_PURCHASE_CREATE: 'returns:purchase:create',
+  RETURNS_PURCHASE_GET: 'returns:purchase:get',
+
+  // Stakeholders, Equity & Capital Profit Distributions
+  STAKEHOLDERS_LIST: 'stakeholders:list',
+  STAKEHOLDERS_CREATE: 'stakeholders:create',
+  STAKEHOLDERS_UPDATE: 'stakeholders:update',
+  STAKEHOLDERS_EQUITY_UPDATE: 'stakeholders:equity:update',
+  STAKEHOLDERS_TX_LIST: 'stakeholders:tx:list',
+  STAKEHOLDERS_TX_CREATE: 'stakeholders:tx:create',
+  STAKEHOLDERS_PERIODS_LIST: 'stakeholders:periods:list',
+  STAKEHOLDERS_PERIODS_CREATE: 'stakeholders:periods:create',
+  STAKEHOLDERS_PERIODS_CLOSE: 'stakeholders:periods:close',
+  STAKEHOLDERS_DISTRIBUTIONS_CALCULATE: 'stakeholders:distributions:calculate',
+  STAKEHOLDERS_DISTRIBUTIONS_CREATE: 'stakeholders:distributions:create',
+  STAKEHOLDERS_DISTRIBUTIONS_LIST: 'stakeholders:distributions:list',
+  STAKEHOLDERS_DISTRIBUTIONS_APPROVE: 'stakeholders:distributions:approve',
+  STAKEHOLDERS_DISTRIBUTIONS_PAYOUT: 'stakeholders:distributions:payout',
+  STAKEHOLDERS_PNL_SUMMARY: 'stakeholders:pnl:summary',
+
   // Reports & Diagnostics Export
   REPORTS_PROFIT_LOSS: 'reports:profit_loss',
 
@@ -260,6 +313,8 @@ export interface BakeryDesktopApi {
     getStockBalances(query: GetStockBalancesQuery): Promise<Result<StockBalanceItem[]>>;
     getMovements(storeId: number, itemId?: number): Promise<Result<StockMovementLogItem[]>>;
     adjustStock(input: { storeId: number; itemId: number; newQuantity: number; reason: string; actorId?: number }): Promise<Result<{ success: boolean; variance: number }>>;
+    getLocations(storeId: number): Promise<Result<StockLocationItem[]>>;
+    transferStock(input: TransferStockInput): Promise<Result<{ success: boolean; movementIds: number[] }>>;
   };
   pos: {
     getActiveShift(storeId: number): Promise<Result<Shift | null>>;
@@ -271,6 +326,7 @@ export interface BakeryDesktopApi {
     checkoutCashSale(input: CheckoutSaleInput): Promise<Result<SaleReceipt>>;
     getRecentSales(storeId: number): Promise<Result<SaleSummary[]>>;
     getSaleReceipt(saleId: number): Promise<Result<SaleReceipt>>;
+    recordSalePayment(input: RecordSalePaymentInput): Promise<Result<{ success: boolean; balanceDueMinorUnits: number; paymentStatus: string }>>;
     printReceiptSilent(input: { html: string; printerName?: string }): Promise<Result<{ printed: boolean; printerName: string }>>;
   };
   purchasing: {
@@ -340,6 +396,31 @@ export interface BakeryDesktopApi {
     disburseSalary(input: DisburseSalaryInput): Promise<Result<SalaryPayment>>;
     listPayments(storeId: number, payrollMonth?: string): Promise<Result<SalaryPayment[]>>;
     getEmployeeStatement(query: GetEmployeeStatementQuery): Promise<Result<EmployeeMonthlyStatementResponse>>;
+  };
+  returns: {
+    listSalesReturns(storeId: number): Promise<Result<SalesReturn[]>>;
+    createSalesReturn(input: PostSalesReturnInput): Promise<Result<SalesReturn>>;
+    getSalesReturn(id: number): Promise<Result<SalesReturn>>;
+    listPurchaseReturns(storeId: number): Promise<Result<PurchaseReturn[]>>;
+    createPurchaseReturn(input: PostPurchaseReturnInput): Promise<Result<PurchaseReturn>>;
+    getPurchaseReturn(id: number): Promise<Result<PurchaseReturn>>;
+  };
+  stakeholders: {
+    list(storeId: number): Promise<Result<Stakeholder[]>>;
+    create(input: CreateStakeholderInput): Promise<Result<Stakeholder>>;
+    update(input: UpdateStakeholderInput): Promise<Result<Stakeholder>>;
+    updateEquity(input: UpdateStakeholderEquityInput): Promise<Result<void>>;
+    listTransactions(storeId: number, stakeholderId?: number): Promise<Result<StakeholderTransaction[]>>;
+    createTransaction(input: CreateStakeholderTxInput): Promise<Result<StakeholderTransaction>>;
+    listPeriods(storeId: number): Promise<Result<FiscalPeriod[]>>;
+    createPeriod(input: CreateFiscalPeriodInput): Promise<Result<FiscalPeriod>>;
+    closePeriod(input: CloseFiscalPeriodInput): Promise<Result<FiscalPeriod>>;
+    calculateDistribution(input: CalculateDistributionInput): Promise<Result<ProfitDistributionRun>>;
+    createDistributionRun(input: CreateDistributionRunInput): Promise<Result<ProfitDistributionRun>>;
+    listDistributionRuns(storeId: number, periodId?: number): Promise<Result<ProfitDistributionRun[]>>;
+    approveDistributionRun(input: ApproveDistributionRunInput): Promise<Result<ProfitDistributionRun>>;
+    payoutDistributionRun(input: PayoutDistributionRunInput): Promise<Result<ProfitDistributionRun>>;
+    getPnlSummary(storeId: number, startDate?: string, endDate?: string): Promise<Result<CompanyPnlSummary>>;
   };
   reports: {
 

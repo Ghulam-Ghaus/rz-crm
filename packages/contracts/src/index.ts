@@ -16,6 +16,8 @@ export * from './purchasing/index.js';
 export * from './production/index.js';
 export * from './custom-orders/index.js';
 export * from './expenses/index.js';
+export * from './returns/index.js';
+export * from './stakeholders/index.js';
 export * from './backup/index.js';
 export * from './ipc-api.js';
 

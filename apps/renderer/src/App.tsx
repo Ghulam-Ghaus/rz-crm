@@ -24,17 +24,20 @@ import type {
   BackupManifest,
   BackupStatus,
   UserSession,
+  StockLocationItem,
 } from '@rz-crm/contracts';
 import { LoginScreen } from './components/LoginScreen.js';
 import { InventoryTab } from './components/InventoryTab.js';
+import { CommercialInvoicesTab } from './components/CommercialInvoicesTab.js';
 import { UsersTab } from './components/UsersTab.js';
-import { MezaanLogo } from './components/MezaanLogo.js';
+import { RzLogo } from './components/RzLogo.js';
 import { GrnItemSearchPicker } from './components/GrnItemSearchPicker.js';
 import { ProfitLossTab } from './components/ProfitLossTab.js';
 import { ExpensesTab } from './components/ExpensesTab.js';
+import { ReturnsTab } from './components/ReturnsTab.js';
 import { PosWeightAmountModal, PosWeightTarget } from './components/PosWeightAmountModal.js';
 
-type ActiveTab = 'pos' | 'products' | 'categories' | 'purchasing' | 'production' | 'custom-orders' | 'inventory' | 'expenses' | 'scanner' | 'reports' | 'users' | 'diagnostics';
+type ActiveTab = 'pos' | 'products' | 'categories' | 'purchasing' | 'returns' | 'production' | 'custom-orders' | 'inventory' | 'expenses' | 'scanner' | 'reports' | 'users' | 'diagnostics';
 
 interface CartItem {
   variantId: number;
@@ -42,6 +45,9 @@ interface CartItem {
   name: string;
   quantity: number;
   unitPriceMinorUnits: number;
+  retailPriceMinorUnits?: number;
+  wholesalePriceMinorUnits?: number;
+  priceTier?: 'retail' | 'wholesale';
   baseUnitCode?: string;
 }
 
@@ -160,19 +166,11 @@ function generate80mmReceiptHtml(receipt: SaleReceipt, cashierName: string): str
 </head>
 <body>
   <div class="text-center">
-    <!-- Header Logo -->
-    <!-- MEZAAN_LOGO_PLACEHOLDER -->
-    <div style="font-family: 'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif; font-size: 21px; font-weight: 800; margin: 2px 0; line-height: 1.35;">
-      میزان سویٹس اینڈ بیکرز
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 19px; font-weight: 900; margin: 4px 0 2px 0; line-height: 1.2; letter-spacing: 0.8px; text-transform: uppercase;">
+      RZ ENTERPRISES
     </div>
-    <div style="font-size: 13px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">
-      MEZAAN SWEETS &amp; BAKERS
-    </div>
-    <div style="font-family: 'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif; font-size: 11px; font-weight: 700; margin: 2px 0; line-height: 1.35;">
-      تازہ اور معیاری مٹھائیوں کا مرکز
-    </div>
-    <div style="font-size: 11px; font-weight: 700; margin-top: 3px;">
-      📍 چک نمبر 24 ج ب لاہوریاں
+    <div style="font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #333333;">
+      Commercial Sales &amp; Invoicing
     </div>
 
     <!-- Contact Persons & Numbers (Right-aligned Urdu with distinct numbers) -->
@@ -316,11 +314,11 @@ export const App: React.FC = () => {
 
       switch (session.role) {
         case 'manager':
-          return ['pos', 'inventory', 'products', 'purchasing', 'production', 'custom-orders', 'expenses', 'scanner', 'reports'].includes(tab);
+          return ['pos', 'inventory', 'products', 'purchasing', 'returns', 'production', 'custom-orders', 'expenses', 'scanner', 'reports'].includes(tab);
         case 'cashier':
-          return ['pos', 'inventory', 'custom-orders', 'scanner'].includes(tab);
+          return ['pos', 'inventory', 'returns', 'custom-orders', 'scanner'].includes(tab);
         case 'purchaser':
-          return ['purchasing', 'inventory'].includes(tab);
+          return ['purchasing', 'returns', 'inventory'].includes(tab);
         case 'baker':
           return ['production', 'inventory'].includes(tab);
         default:
@@ -335,6 +333,7 @@ export const App: React.FC = () => {
       const allTabs: ActiveTab[] = [
         'pos',
         'purchasing',
+        'returns',
         'custom-orders',
         'inventory',
         'production',
@@ -368,6 +367,8 @@ export const App: React.FC = () => {
   const [pSku, setPSku] = useState<string>('');
   const [pPrice, setPPrice] = useState<string>('150.00');
   const [pCostPrice, setPCostPrice] = useState<string>('100.00');
+  const [pWholesalePrice, setPWholesalePrice] = useState<string>('120.00');
+  const [pReorderPoint, setPReorderPoint] = useState<string>('10');
   const [pUnit, setPUnit] = useState<string>('pcs');
   const [pBarcode, setPBarcode] = useState<string>('');
   const [prodMsg, setProdMsg] = useState<string | null>(null);
@@ -411,6 +412,38 @@ export const App: React.FC = () => {
   const [lastReceipt, setLastReceipt] = useState<SaleReceipt | null>(null);
   const [isPrintingReceipt, setIsPrintingReceipt] = useState<boolean>(false);
   const [receiptPrintFeedback, setReceiptPrintFeedback] = useState<string | null>(null);
+  const [receiptViewMode, setReceiptViewMode] = useState<'thermal' | 'commercial'>('commercial');
+
+  // Commercial Wholesale & Invoicing State
+  const [posSubTab, setPosSubTab] = useState<'terminal' | 'invoices'>('terminal');
+  const [posOrderType, setPosOrderType] = useState<'retail' | 'wholesale'>('retail');
+  const [posPriceTier, setPosPriceTier] = useState<'retail' | 'wholesale'>('retail');
+  const [posLocations, setPosLocations] = useState<StockLocationItem[]>([]);
+  const [posSelectedLocationId, setPosSelectedLocationId] = useState<number | null>(null);
+  const [posCustomers, setPosCustomers] = useState<Customer[]>([]);
+  const [posSelectedCustomer, setPosSelectedCustomer] = useState<Customer | null>(null);
+
+  // Enhanced Checkout Form State
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<'cash' | 'bank_transfer' | 'cheque' | 'credit'>('cash');
+  const [checkoutAmountPaidRs, setCheckoutAmountPaidRs] = useState<string>('');
+  const [checkoutDueDate, setCheckoutDueDate] = useState<string>('');
+  const [checkoutPaymentTerms, setCheckoutPaymentTerms] = useState<string>('Net 30');
+  const [checkoutReferenceNote, setCheckoutReferenceNote] = useState<string>('');
+  const [checkoutBankName, setCheckoutBankName] = useState<string>('');
+  const [checkoutChequeDate, setCheckoutChequeDate] = useState<string>('');
+
+  // Quick Customer Creation Modal State
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState<boolean>(false);
+  const [posCustName, setPosCustName] = useState<string>('');
+  const [posCustCompany, setPosCustCompany] = useState<string>('');
+  const [posCustPhone, setPosCustPhone] = useState<string>('');
+  const [posCustTaxNo, setPosCustTaxNo] = useState<string>('');
+  const [posCustAddress, setPosCustAddress] = useState<string>('');
+  const [posCustCreditLimitRs, setPosCustCreditLimitRs] = useState<string>('50000');
+  const [posCustTermsDays, setPosCustTermsDays] = useState<string>('30');
+  const [posCustType, setPosCustType] = useState<'retail' | 'wholesale'>('wholesale');
+  const [savingPosCust, setSavingPosCust] = useState<boolean>(false);
+  const [posCustError, setPosCustError] = useState<string | null>(null);
 
   // Reports, Shift History & Backup State
   const [reportsSubTab, setReportsSubTab] = useState<'sales' | 'shifts' | 'pnl' | 'backup'>('sales');
@@ -470,6 +503,7 @@ export const App: React.FC = () => {
   const [grnNotes, setGrnNotes] = useState<string>('');
   const [grnPaymentAmountRs, setGrnPaymentAmountRs] = useState<string>('');
   const [grnPaymentMethod, setGrnPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE_WALLET' | 'ADVANCE_ADJUSTMENT'>('CASH');
+  const [grnLocationId, setGrnLocationId] = useState<string>('');
   const [selectedGrnDetail, setSelectedGrnDetail] = useState<GoodsReceipt | null>(null);
   const [selectedPoDetail, setSelectedPoDetail] = useState<PurchaseOrder | null>(null);
   const [grnLines, setGrnLines] = useState<Array<{
@@ -492,6 +526,8 @@ export const App: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<ProductListItem | null>(null);
   const [editPriceRs, setEditPriceRs] = useState<string>('');
   const [editCostRs, setEditCostRs] = useState<string>('');
+  const [editWholesalePriceRs, setEditWholesalePriceRs] = useState<string>('');
+  const [editReorderPoint, setEditReorderPoint] = useState<string>('10');
   const [editName, setEditName] = useState<string>('');
   const [editCatId, setEditCatId] = useState<string>('');
   const [editBarcode, setEditBarcode] = useState<string>('');
@@ -536,6 +572,9 @@ export const App: React.FC = () => {
   const [paymentSupplier, setPaymentSupplier] = useState<Supplier | null>(null);
   const [paymentAmountRs, setPaymentAmountRs] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE_WALLET' | 'ADVANCE_ADJUSTMENT' | 'OTHER'>('CASH');
+  const [paymentBankName, setPaymentBankName] = useState<string>('');
+  const [paymentChequeDate, setPaymentChequeDate] = useState<string>('');
+  const [paymentGrnId, setPaymentGrnId] = useState<number | null>(null);
   const [paymentReference, setPaymentReference] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
 
@@ -691,6 +730,29 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // 5. Load POS Metadata (Locations & Customers)
+  const loadPosMetadata = useCallback(async (stId: number) => {
+    try {
+      if (!window.bakery) return;
+      const [locRes, custRes] = await Promise.all([
+        window.bakery.inventory.getLocations(stId),
+        window.bakery.customOrders.searchCustomers(stId, ''),
+      ]);
+      if (locRes.success && locRes.data) {
+        setPosLocations(locRes.data);
+        if (locRes.data.length > 0) {
+          const showroom = locRes.data.find((l) => l.code === 'SR-MAIN') || locRes.data[0];
+          setPosSelectedLocationId((prev) => prev ?? (showroom ? showroom.id : null));
+        }
+      }
+      if (custRes.success && custRes.data) {
+        setPosCustomers(custRes.data);
+      }
+    } catch (err) {
+      console.error('Failed to load POS metadata:', err);
+    }
+  }, []);
+
   useEffect(() => {
     runDiagnostics();
     loadCategoriesAndUnits();
@@ -702,16 +764,18 @@ export const App: React.FC = () => {
       if (res.success && res.data) {
         setStore(res.data);
         loadActiveShift(res.data.id);
+        loadPosMetadata(res.data.id);
       }
     };
     initStore();
-  }, [runDiagnostics, loadCategoriesAndUnits, loadProducts, loadActiveShift]);
+  }, [runDiagnostics, loadCategoriesAndUnits, loadProducts, loadActiveShift, loadPosMetadata]);
 
   useEffect(() => {
     if (store) {
       loadActiveShift(store.id);
+      loadPosMetadata(store.id);
     }
-  }, [store, loadActiveShift]);
+  }, [store, loadActiveShift, loadPosMetadata]);
 
   // Global Keyboard Shortcuts (Function Keys F1-F10)
   useEffect(() => {
@@ -1235,12 +1299,21 @@ export const App: React.FC = () => {
     }
   };
 
-  const openRecordPayment = (supplier: Supplier) => {
+  const openRecordPayment = (
+    supplier: Supplier,
+    defaultAmountRs?: string,
+    defaultRef?: string,
+    defaultNotes?: string,
+    grnId?: number
+  ) => {
     setPaymentSupplier(supplier);
-    setPaymentAmountRs('');
+    setPaymentAmountRs(defaultAmountRs || '');
     setPaymentMethod('CASH');
-    setPaymentReference('');
-    setPaymentNotes('');
+    setPaymentBankName('');
+    setPaymentChequeDate('');
+    setPaymentGrnId(grnId ?? null);
+    setPaymentReference(defaultRef || '');
+    setPaymentNotes(defaultNotes || '');
     setShowRecordPaymentModal(true);
   };
 
@@ -1259,11 +1332,17 @@ export const App: React.FC = () => {
         supplierId: paymentSupplier.id,
         amountMinorUnits: amt,
         paymentMethod,
+        bankName: (paymentMethod === 'BANK_TRANSFER' || paymentMethod === 'CHEQUE') ? (paymentBankName.trim() || undefined) : undefined,
+        chequeDate: paymentMethod === 'CHEQUE' ? (paymentChequeDate || undefined) : undefined,
+        grnId: paymentGrnId ?? undefined,
         reference: paymentReference.trim() || undefined,
         notes: paymentNotes.trim() || undefined,
       });
       if (res.success) {
         setShowRecordPaymentModal(false);
+        setPaymentBankName('');
+        setPaymentChequeDate('');
+        setPaymentGrnId(null);
         loadSuppliers();
         loadGoodsReceipts();
         if (showSupplierLedgerModal && selectedSupplierLedger?.supplier.id === paymentSupplier.id) {
@@ -1324,6 +1403,7 @@ export const App: React.FC = () => {
         taxNumber: supTaxNumber || undefined,
         address: supAddress || undefined,
         paymentTermsDays: parseInt(supTerms, 10) || 0,
+        creditLimitMinorUnits: 0,
       });
       if (res.success) {
         setPurchasingMsg(`✓ Supplier '${res.data.name}' registered successfully.`);
@@ -1448,6 +1528,7 @@ export const App: React.FC = () => {
             phone: '0300-0000000',
             address: 'Spot Cash Purchases',
             paymentTermsDays: 0,
+            creditLimitMinorUnits: 0,
           });
           if (createSupRes.success) {
             walkinSup = createSupRes.data;
@@ -1526,6 +1607,7 @@ export const App: React.FC = () => {
           storeId: store.id,
           supplierId: supId,
           purchaseOrderId: poId,
+          stockLocationId: grnLocationId ? parseInt(grnLocationId, 10) : undefined,
           supplierInvoiceRef: finalInvoiceRef,
           notes: grnNotes || undefined,
           lines: parsedLines,
@@ -1560,6 +1642,7 @@ export const App: React.FC = () => {
               paymentDateUtc: new Date().toISOString(),
               amountMinorUnits: paidMinorUnits,
               paymentMethod: grnPaymentMethod || 'CASH',
+              grnId: res.data.id,
               reference: `PAY-${res.data.grnNumber}`,
               notes: `Settlement for GRN ${res.data.grnNumber} via ${methodLabel}${statusDesc}`,
             });
@@ -2123,7 +2206,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Cart operations
+  // Cart operations with Wholesale Commercial Pricing support
   const addToCart = (prod: ProductListItem) => {
     setPosError(null);
     setCart((prev) => {
@@ -2136,6 +2219,12 @@ export const App: React.FC = () => {
         }
         return next;
       }
+
+      const wholesalePrice = prod.wholesalePriceMinorUnits ?? 0;
+      const retailPrice = prod.priceMinorUnits;
+      const useWholesale = posOrderType === 'wholesale' && wholesalePrice > 0;
+      const initialPrice = useWholesale ? wholesalePrice : retailPrice;
+
       return [
         ...prev,
         {
@@ -2143,11 +2232,52 @@ export const App: React.FC = () => {
           sku: prod.sku,
           name: prod.name,
           quantity: 1,
-          unitPriceMinorUnits: prod.priceMinorUnits,
+          unitPriceMinorUnits: initialPrice,
+          retailPriceMinorUnits: retailPrice,
+          wholesalePriceMinorUnits: wholesalePrice,
+          priceTier: useWholesale ? 'wholesale' : 'retail',
           baseUnitCode: prod.baseUnitCode,
         },
       ];
     });
+  };
+
+  const handleToggleOrderType = (newType: 'retail' | 'wholesale') => {
+    setPosOrderType(newType);
+    setPosPriceTier(newType);
+    setCart((prev) =>
+      prev.map((item) => {
+        const targetPrice =
+          newType === 'wholesale' && (item.wholesalePriceMinorUnits ?? 0) > 0
+            ? item.wholesalePriceMinorUnits!
+            : item.retailPriceMinorUnits ?? item.unitPriceMinorUnits;
+        return {
+          ...item,
+          unitPriceMinorUnits: targetPrice,
+          priceTier: newType,
+        };
+      })
+    );
+  };
+
+  const toggleItemPriceTier = (variantId: number) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.variantId === variantId) {
+          const nextTier = item.priceTier === 'wholesale' ? 'retail' : 'wholesale';
+          const nextPrice =
+            nextTier === 'wholesale' && (item.wholesalePriceMinorUnits ?? 0) > 0
+              ? item.wholesalePriceMinorUnits!
+              : item.retailPriceMinorUnits ?? item.unitPriceMinorUnits;
+          return {
+            ...item,
+            priceTier: nextTier,
+            unitPriceMinorUnits: nextPrice,
+          };
+        }
+        return item;
+      })
+    );
   };
 
   const handleConfirmWeightModal = (target: PosWeightTarget, newQty: number) => {
@@ -2170,6 +2300,9 @@ export const App: React.FC = () => {
           name: target.name,
           quantity: newQty,
           unitPriceMinorUnits: target.priceMinorUnits,
+          retailPriceMinorUnits: target.priceMinorUnits,
+          wholesalePriceMinorUnits: target.priceMinorUnits,
+          priceTier: posPriceTier,
           baseUnitCode: target.baseUnitCode,
         },
       ];
@@ -2201,7 +2334,7 @@ export const App: React.FC = () => {
   );
   const cartTotalMinor = cartSubtotalMinor; // Tax added in Phase 6
 
-  // Handle Checkout Submit
+  // Handle Checkout Submit with Multi-Payment and Commercial Support
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     let currentStore = store;
@@ -2212,24 +2345,46 @@ export const App: React.FC = () => {
         setStore(currentStore);
       }
     }
-    if (!currentStore || !activeShift) return;
-    const tenderMinor = Math.round(parseFloat(tenderedRs || '0') * 100);
+    if (!currentStore) return;
 
-    if (tenderMinor < cartTotalMinor) {
+    const tenderMinor = Math.round(parseFloat(tenderedRs || '0') * 100);
+    const amountPaidMinor =
+      checkoutPaymentMethod === 'cash'
+        ? cartTotalMinor
+        : checkoutPaymentMethod === 'credit'
+        ? Math.round(parseFloat(checkoutAmountPaidRs || '0') * 100)
+        : Math.round(parseFloat(checkoutAmountPaidRs || (cartTotalMinor / 100).toString()) * 100);
+
+    if (checkoutPaymentMethod === 'cash' && tenderMinor < cartTotalMinor) {
       setPosError(`Tendered amount (Rs. ${(tenderMinor / 100).toFixed(2)}) is less than total due.`);
       return;
     }
 
     const res = await window.bakery.pos.checkoutCashSale({
       storeId: currentStore.id,
-      shiftId: activeShift.id,
-      cashierId: activeShift.cashierId,
+      shiftId: activeShift?.id,
+      cashierId: activeShift?.cashierId || session?.username || 'admin',
+      customerId: posSelectedCustomer?.id ?? null,
+      customerName: posSelectedCustomer?.name ?? (posOrderType === 'wholesale' ? 'Wholesale Client' : 'Walk-In Customer'),
+      orderType: posOrderType,
+      priceTier: posPriceTier,
+      locationId: posSelectedLocationId,
+      paymentMethod: checkoutPaymentMethod,
+      amountTenderedMinorUnits: checkoutPaymentMethod === 'cash' ? tenderMinor : amountPaidMinor,
+      amountPaidMinorUnits: amountPaidMinor,
+      paymentTerms: checkoutPaymentMethod === 'credit' ? checkoutPaymentTerms : undefined,
+      dueDate: checkoutPaymentMethod === 'credit' && checkoutDueDate ? checkoutDueDate : undefined,
+      referenceNote: checkoutReferenceNote.trim() || undefined,
+      bankName: checkoutBankName.trim() || undefined,
+      chequeDate: checkoutChequeDate.trim() || undefined,
       items: cart.map((c) => ({
         variantId: c.variantId,
         quantity: c.quantity,
         unitPriceMinorUnits: c.unitPriceMinorUnits,
+        sku: c.sku,
+        productName: c.name,
+        priceTier: c.priceTier || posPriceTier,
       })),
-      amountTenderedMinorUnits: tenderMinor,
     });
 
     if (res.success) {
@@ -2237,10 +2392,57 @@ export const App: React.FC = () => {
       setCart([]);
       setShowCheckoutModal(false);
       setTenderedRs('');
+      setCheckoutAmountPaidRs('');
+      setCheckoutReferenceNote('');
       setPosError(null);
-      loadActiveShift(currentStore.id); // refresh drawer balance
+      loadActiveShift(currentStore.id);
+      loadPosMetadata(currentStore.id);
     } else {
       setPosError(`Checkout Failed: ${res.error.message}`);
+    }
+  };
+
+  // Quick Customer Creation Submit
+  const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!posCustName.trim()) {
+      setPosCustError('Customer Name is required.');
+      return;
+    }
+    const currentStoreId = store?.id || 1;
+    setSavingPosCust(true);
+    setPosCustError(null);
+    try {
+      const res = await window.bakery.customOrders.createCustomer({
+        storeId: currentStoreId,
+        name: posCustName.trim(),
+        companyName: posCustCompany.trim() || undefined,
+        phone: posCustPhone.trim() || undefined,
+        taxNumber: posCustTaxNo.trim() || undefined,
+        address: posCustAddress.trim() || undefined,
+        creditLimitMinorUnits: Math.round(parseFloat(posCustCreditLimitRs || '0') * 100),
+        paymentTermsDays: parseInt(posCustTermsDays || '0', 10),
+        customerType: posCustType,
+      });
+
+      if (res.success) {
+        setPosCustomers((prev) => [res.data, ...prev]);
+        setPosSelectedCustomer(res.data);
+        setShowNewCustomerModal(false);
+        setPosCustName('');
+        setPosCustCompany('');
+        setPosCustPhone('');
+        setPosCustTaxNo('');
+        setPosCustAddress('');
+        setPosCustCreditLimitRs('50000');
+        setPosCustTermsDays('30');
+      } else {
+        setPosCustError(res.error?.message || 'Failed to create customer');
+      }
+    } catch (err: unknown) {
+      setPosCustError(err instanceof Error ? err.message : 'Error creating customer');
+    } finally {
+      setSavingPosCust(false);
     }
   };
 
@@ -2256,6 +2458,8 @@ export const App: React.FC = () => {
 
     const priceCents = Math.round(parseFloat(pPrice || '0') * 100);
     const costCents = Math.round(parseFloat(pCostPrice || '0') * 100);
+    const wholesaleCents = Math.round(parseFloat(pWholesalePrice || '0') * 100);
+    const reorderPt = parseFloat(pReorderPoint || '10') || 10;
 
     const res = await window.bakery.catalog.createProduct({
       code: pCode.trim().toUpperCase(),
@@ -2264,6 +2468,8 @@ export const App: React.FC = () => {
       sku: pSku.trim().toUpperCase(),
       priceMinorUnits: priceCents,
       costMinorUnits: costCents,
+      wholesalePriceMinorUnits: wholesaleCents,
+      reorderPoint: reorderPt,
       currencyCode: 'PKR',
       baseUnitCode: pUnit,
       barcode: pBarcode.trim() || undefined,
@@ -2275,7 +2481,9 @@ export const App: React.FC = () => {
       setPSku('');
       setPBarcode('');
       setPCostPrice('100.00');
+      setPWholesalePrice('120.00');
       setPPrice('150.00');
+      setPReorderPoint('10');
       setProdMsg('Product created successfully');
       loadProducts();
       setTimeout(() => {
@@ -2295,6 +2503,8 @@ export const App: React.FC = () => {
 
     const priceCents = Math.round(parseFloat(editPriceRs || '0') * 100);
     const costCents = Math.round(parseFloat(editCostRs || '0') * 100);
+    const wholesaleCents = Math.round(parseFloat(editWholesalePriceRs || '0') * 100);
+    const reorderPt = parseFloat(editReorderPoint || '10') || 10;
 
     const res = await window.bakery.catalog.updateProduct({
       id: editingProduct.id,
@@ -2303,11 +2513,13 @@ export const App: React.FC = () => {
       categoryId: editCatId ? parseInt(editCatId, 10) : null,
       priceMinorUnits: priceCents,
       costMinorUnits: costCents,
+      wholesalePriceMinorUnits: wholesaleCents,
+      reorderPoint: reorderPt,
       barcode: editBarcode.trim() || null,
     });
 
     if (res.success) {
-      setEditProdMsg('✓ Product prices and details updated successfully!');
+      setEditProdMsg('✓ Product prices, wholesale rate, and reorder point updated successfully!');
       loadProducts();
       setTimeout(() => {
         setEditingProduct(null);
@@ -2316,6 +2528,47 @@ export const App: React.FC = () => {
     } else {
       setEditProdMsg(`Error: ${res.error.message}`);
     }
+  };
+
+  // Export Product Catalog as CSV
+  const handleExportProductsCsv = () => {
+    if (products.length === 0) return;
+    const headers = [
+      'Code',
+      'Name',
+      'Category',
+      'SKU',
+      'Barcode',
+      'Cost Price (PKR)',
+      'Wholesale Price (PKR)',
+      'Retail Price (PKR)',
+      'Reorder Alert Point',
+      'Base Unit',
+      'Status',
+    ];
+    const rows = products.map((p) => [
+      `"${p.code}"`,
+      `"${p.name.replace(/"/g, '""')}"`,
+      `"${(p.categoryName || '').replace(/"/g, '""')}"`,
+      `"${p.sku}"`,
+      `"${p.barcode || ''}"`,
+      ((p.costMinorUnits || 0) / 100).toFixed(2),
+      ((p.wholesalePriceMinorUnits || 0) / 100).toFixed(2),
+      ((p.priceMinorUnits || 0) / 100).toFixed(2),
+      p.reorderPoint ?? 10,
+      p.baseUnitCode,
+      p.isActive ? 'Active' : 'Inactive',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `rz-crm-products-catalog-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Handle Quick Add Category on the Fly
@@ -2682,6 +2935,8 @@ export const App: React.FC = () => {
             sku: resolved.variant.sku,
             priceMinorUnits: resolved.variant.priceMinorUnits,
             costMinorUnits: 0,
+            wholesalePriceMinorUnits: 0,
+            reorderPoint: 10,
             currencyCode: 'PKR',
             baseUnitCode: resolved.baseUnitCode || 'pcs',
             isActive: true,
@@ -2722,39 +2977,35 @@ export const App: React.FC = () => {
       {/* Left Sidebar Menu */}
       <aside className="app-sidebar no-print">
         {/* Brand Header */}
-        <div className="sidebar-header" style={{ padding: '16px 14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #2d180c' }}>
-          <MezaanLogo size={48} theme="dark" />
-          <div style={{ flex: 1, minWidth: 0, overflow: 'visible' }}>
+        <div className="sidebar-header" style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(99, 102, 241, 0.2)', background: 'rgba(15, 23, 42, 0.6)' }}>
+          <RzLogo size={42} theme="dark" />
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                fontFamily: "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif",
-                fontSize: '17px',
-                fontWeight: 700,
-                color: '#fbbf24',
+                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontSize: '15px',
+                fontWeight: 800,
+                color: '#f8fafc',
                 whiteSpace: 'nowrap',
-                lineHeight: 2.1,
-                paddingTop: '2px',
-                paddingBottom: '2px',
-                textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                lineHeight: 1.2,
+                letterSpacing: '0.8px',
+                textTransform: 'uppercase',
               }}
             >
-              میزان سویٹس اینڈ بیکرز
+              RZ ENTERPRISES
             </div>
             <div
               style={{
-                fontSize: '11px',
-                color: '#fed7aa',
+                fontSize: '10.5px',
+                fontWeight: 700,
+                color: '#818cf8',
                 whiteSpace: 'nowrap',
-                lineHeight: 1.6,
-                fontFamily: "'Noto Nastaliq Urdu', serif",
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                marginTop: '1px',
+                letterSpacing: '1px',
+                textTransform: 'uppercase',
+                marginTop: '2px',
               }}
             >
-              <span>📍</span>
-              <span>چک 24 ج ب لاہوریاں</span>
+              CRM &amp; Inventory
             </div>
           </div>
         </div>
@@ -2804,8 +3055,8 @@ export const App: React.FC = () => {
               className={`nav-item-btn ${activeTab === 'products' ? 'active' : ''}`}
               onClick={() => setActiveTab('products')}
             >
-              <span className="nav-item-icon">🥐</span>
-              <span>Product Catalog</span>
+              <span className="nav-item-icon">🏷️</span>
+              <span>Products & Catalog</span>
             </button>
           )}
           {hasPermission('purchasing') && (
@@ -2818,24 +3069,14 @@ export const App: React.FC = () => {
               <span>Purchasing & GRN</span>
             </button>
           )}
-          {hasPermission('production') && (
+          {hasPermission('returns') && (
             <button
               type="button"
-              className={`nav-item-btn ${activeTab === 'production' ? 'active' : ''}`}
-              onClick={() => setActiveTab('production')}
+              className={`nav-item-btn ${activeTab === 'returns' ? 'active' : ''}`}
+              onClick={() => setActiveTab('returns')}
             >
-              <span className="nav-item-icon">👨‍🍳</span>
-              <span>Production & Recipes</span>
-            </button>
-          )}
-          {hasPermission('custom-orders') && (
-            <button
-              type="button"
-              className={`nav-item-btn ${activeTab === 'custom-orders' ? 'active' : ''}`}
-              onClick={() => setActiveTab('custom-orders')}
-            >
-              <span className="nav-item-icon">🎂</span>
-              <span>Custom Orders</span>
+              <span className="nav-item-icon">↩️</span>
+              <span>Returns & Reversals</span>
             </button>
           )}
           {hasPermission('scanner') && (
@@ -2920,12 +3161,12 @@ export const App: React.FC = () => {
             </h1>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#64748b' }}>
-            <span style={{ fontWeight: 700, color: '#92400e', fontFamily: "'Noto Nastaliq Urdu', serif", fontSize: '14px' }}>
-              میزان سویٹس اینڈ بیکرز
+            <span style={{ fontWeight: 800, color: '#1e40af', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: '13px', letterSpacing: '0.5px' }}>
+              RZ ENTERPRISES
             </span>
             <span style={{ color: '#cbd5e1' }}>|</span>
             <span style={{ fontSize: '11px', color: '#4b5563' }}>
-              📍 چک 24 ج ب لاہوریاں
+              📍 Commercial CRM &amp; Distribution
             </span>
             <span style={{ color: '#cbd5e1' }}>|</span>
             <span>{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
@@ -2986,50 +3227,224 @@ export const App: React.FC = () => {
           {/* TAB 1: POS TERMINAL */}
           {activeTab === 'pos' && (
             <div>
-              {/* Shift Status Bar */}
+              {/* POS Sub-Navigation (Terminal vs Invoices Register) */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPosSubTab('terminal')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    border: posSubTab === 'terminal' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: posSubTab === 'terminal' ? '#eff6ff' : '#ffffff',
+                    color: posSubTab === 'terminal' ? '#1e40af' : '#475569',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>🛒</span> Sales Terminal (POS / Wholesale)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosSubTab('invoices')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    border: posSubTab === 'invoices' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: posSubTab === 'invoices' ? '#eff6ff' : '#ffffff',
+                    color: posSubTab === 'invoices' ? '#1e40af' : '#475569',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>📑</span> Invoices &amp; Commercial Sales Register
+                </button>
+              </div>
+
+              {posSubTab === 'invoices' ? (
+                <CommercialInvoicesTab
+                  storeId={store?.id || 1}
+                  onOpenReceiptModal={(r) => {
+                    setLastReceipt(r);
+                    setReceiptViewMode('commercial');
+                  }}
+                />
+              ) : (
+                <div>
+                  {/* Commercial Order Mode, Stock Location, & Customer Controls Strip */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    {/* Left: Order Type Switcher */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Order Mode:</span>
+                      <div style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleOrderType('retail')}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            border: 'none',
+                            background: posOrderType === 'retail' ? '#0f172a' : '#ffffff',
+                            color: posOrderType === 'retail' ? '#ffffff' : '#475569',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          🛒 Retail POS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleOrderType('wholesale')}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            border: 'none',
+                            background: posOrderType === 'wholesale' ? '#3730a3' : '#ffffff',
+                            color: posOrderType === 'wholesale' ? '#ffffff' : '#475569',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          💼 Wholesale Commercial
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Center: Source Stock Location */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>📍 Stock Location:</span>
+                      <select
+                        className="form-input"
+                        style={{ height: '30px', fontSize: '11.5px', padding: '2px 8px', width: '160px' }}
+                        value={posSelectedLocationId ?? ''}
+                        onChange={(e) => setPosSelectedLocationId(e.target.value ? Number(e.target.value) : null)}
+                      >
+                        {posLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name} ({loc.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Right: Client / Customer Picker */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>👤 Client:</span>
+                      <select
+                        className="form-input"
+                        style={{ height: '30px', fontSize: '11.5px', padding: '2px 8px', width: '170px' }}
+                        value={posSelectedCustomer?.id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setPosSelectedCustomer(null);
+                          } else {
+                            const c = posCustomers.find((item) => item.id === Number(val));
+                            setPosSelectedCustomer(c || null);
+                          }
+                        }}
+                      >
+                        <option value="">Walk-In Retail Customer</option>
+                        {posCustomers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.companyName ? `(${c.companyName})` : ''}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setShowNewCustomerModal(true)}
+                        style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}
+                        title="Add New Customer / Wholesale Account"
+                      >
+                        + Client
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CRM Sales Terminal Status Bar */}
               <div
                 style={{
-                  background: activeShift ? '#ecfdf5' : '#fffbeb',
-                  border: `1px solid ${activeShift ? '#a7f3d0' : '#fde68a'}`,
-                  borderRadius: '4px',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '10px',
                   padding: '10px 16px',
                   marginBottom: '14px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  color: '#ffffff',
                 }}
               >
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span
                     style={{
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      color: activeShift ? '#065f46' : '#92400e',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      color: '#34d399',
+                      letterSpacing: '1px',
+                      textTransform: 'uppercase',
                     }}
                   >
-                    {activeShift ? '● SHIFT ACTIVE' : '○ NO SHIFT OPEN'}
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
+                    Sales Terminal Ready
+                  </span>
+                  <span style={{ fontSize: '12.5px', color: '#94a3b8' }}>
+                    Branch: <strong style={{ color: '#f8fafc' }}>{store?.name || 'RZ Enterprises Main'}</strong>
                   </span>
                   {activeShift && (
-                    <span style={{ marginLeft: '12px', fontSize: '13px', color: '#374151' }}>
-                      Shift Opened: <strong>{formatDateTime(activeShift.openedAtUtc)}</strong> · Float: Rs. {(activeShift.openingFloatMinorUnits / 100).toFixed(2)} · Expected Drawer Cash: <strong>Rs. {(activeShift.expectedCashMinorUnits / 100).toFixed(2)}</strong>
+                    <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                      &bull; Session: {activeShift.shiftCode || '#' + activeShift.id}
                     </span>
                   )}
                 </div>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {activeShift ? (
                     <button
-                      className="btn-primary"
-                      style={{ backgroundColor: '#dc2626', borderColor: '#b91c1c' }}
+                      className="tab-btn"
+                      style={{ padding: '4px 10px', fontSize: '12px', color: '#f87171' }}
                       onClick={() => {
                         setCountedCashRs((activeShift.expectedCashMinorUnits / 100).toFixed(2));
                         setShowCloseShiftModal(true);
                       }}
+                      title="Reconcile Cash Drawer"
                     >
                       Close Shift
                     </button>
                   ) : (
-                    <button className="btn-primary" onClick={() => setShowOpenShiftModal(true)}>
-                      Open Shift
+                    <button
+                      className="tab-btn"
+                      style={{ padding: '4px 10px', fontSize: '12px', color: '#93c5fd' }}
+                      onClick={() => setShowOpenShiftModal(true)}
+                      title="Optionally open cash drawer session"
+                    >
+                      + Drawer Session
                     </button>
                   )}
                 </div>
@@ -3041,28 +3456,8 @@ export const App: React.FC = () => {
                 </div>
               )}
 
-              {!activeShift ? (
-                <div
-                  className="panel-card"
-                  style={{ padding: '36px', textAlign: 'center', background: '#ffffff' }}
-                >
-                  <h2 style={{ fontSize: '18px', color: '#111827', marginBottom: '8px' }}>
-                    Cashier Shift is Closed
-                  </h2>
-                  <p style={{ color: '#4b5563', marginBottom: '16px' }}>
-                    You must open a shift with an opening cash float before ringing up sales.
-                  </p>
-                  <button
-                    className="btn-primary"
-                    style={{ fontSize: '14px', padding: '8px 16px' }}
-                    onClick={() => setShowOpenShiftModal(true)}
-                  >
-                    Open Cashier Shift Now
-                  </button>
-                </div>
-              ) : (
-                /* Split Screen POS Interface */
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: '14px', alignItems: 'start', width: '100%', maxWidth: '100%' }}>
+              {/* Split Screen POS Interface - Always Accessible */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: '14px', alignItems: 'start', width: '100%', maxWidth: '100%' }}>
                   {/* Left Side: Products Catalog & Search */}
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>
                     <div style={{ marginBottom: '10px', display: 'flex', gap: '8px' }}>
@@ -3371,8 +3766,27 @@ export const App: React.FC = () => {
                                 <tr key={item.variantId}>
                                   <td style={{ padding: '6px 4px' }}>
                                     <div style={{ fontWeight: 600, fontSize: '12px' }}>{item.name}</div>
-                                    <div style={{ fontSize: '11px', color: '#6b7280' }}>
-                                      Rs. {(item.unitPriceMinorUnits / 100).toFixed(2)}
+                                    <div style={{ fontSize: '11px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                      <span>Rs. {(item.unitPriceMinorUnits / 100).toFixed(2)}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleItemPriceTier(item.variantId)}
+                                        style={{
+                                          padding: '1px 5px',
+                                          fontSize: '10px',
+                                          fontWeight: 700,
+                                          borderRadius: '3px',
+                                          border: '1px solid',
+                                          borderColor: item.priceTier === 'wholesale' ? '#818cf8' : '#cbd5e1',
+                                          background: item.priceTier === 'wholesale' ? '#e0e7ff' : '#f1f5f9',
+                                          color: item.priceTier === 'wholesale' ? '#3730a3' : '#475569',
+                                          cursor: 'pointer',
+                                          lineHeight: 1.2,
+                                        }}
+                                        title="Click to toggle between Wholesale and Retail rate"
+                                      >
+                                        {item.priceTier === 'wholesale' ? '💼 Whsl' : '🛒 Ret'}
+                                      </button>
                                     </div>
                                   </td>
                                   <td style={{ textAlign: 'center', padding: '6px 4px' }}>
@@ -3527,26 +3941,29 @@ export const App: React.FC = () => {
                           disabled={cart.length === 0}
                           onClick={() => {
                             setTenderedRs((cartTotalMinor / 100).toString());
+                            setCheckoutAmountPaidRs((cartTotalMinor / 100).toString());
+                            setCheckoutPaymentMethod(posOrderType === 'wholesale' ? 'credit' : 'cash');
                             setShowCheckoutModal(true);
                           }}
                           style={{
                             flex: 2,
                             padding: '10px',
                             fontSize: '14px',
-                            backgroundColor: cart.length > 0 ? '#059669' : '#9ca3af',
-                            borderColor: cart.length > 0 ? '#047857' : '#9ca3af',
+                            backgroundColor: cart.length > 0 ? (posOrderType === 'wholesale' ? '#3730a3' : '#059669') : '#9ca3af',
+                            borderColor: cart.length > 0 ? (posOrderType === 'wholesale' ? '#312e81' : '#047857') : '#9ca3af',
                             fontWeight: 700,
                           }}
                         >
-                          Complete Cash Sale
+                          {posOrderType === 'wholesale' ? '💼 Commercial Checkout' : 'Complete Cash Sale'}
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        )}
 
           {/* TAB 2: PRODUCT CATALOG (Full Screen / 100% Width) */}
           {activeTab === 'products' && (
@@ -3558,6 +3975,15 @@ export const App: React.FC = () => {
                     <span className="panel-badge ok">{products.length} Products</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '7px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      onClick={handleExportProductsCsv}
+                      title="Export all products to CSV"
+                    >
+                      <span>📥 Export CSV</span>
+                    </button>
                     <button
                       type="button"
                       className="btn-secondary"
@@ -3581,7 +4007,9 @@ export const App: React.FC = () => {
                         setPSku('');
                         setPBarcode('');
                         setPCostPrice('100.00');
+                        setPWholesalePrice('120.00');
                         setPPrice('150.00');
+                        setPReorderPoint('10');
                         setProdMsg(null);
                         setShowAddProductModal(true);
                       }}
@@ -3600,8 +4028,10 @@ export const App: React.FC = () => {
                         <th style={{ textAlign: 'left', padding: '6px 8px' }}>Category</th>
                         <th style={{ textAlign: 'left', padding: '6px 8px' }}>SKU</th>
                         <th style={{ textAlign: 'right', padding: '6px 8px' }}>Buy Cost (PKR)</th>
-                        <th style={{ textAlign: 'right', padding: '6px 8px' }}>Sale Price (PKR)</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px' }}>Wholesale (PKR)</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px' }}>Retail Price (PKR)</th>
                         <th style={{ textAlign: 'right', padding: '6px 8px' }}>Unit Profit</th>
+                        <th style={{ textAlign: 'center', padding: '6px 8px' }}>Reorder Alert</th>
                         <th style={{ textAlign: 'left', padding: '6px 8px' }}>Barcode</th>
                         <th style={{ textAlign: 'right', padding: '6px 8px' }}>Unit</th>
                         <th style={{ textAlign: 'center', padding: '6px 8px' }}>Action</th>
@@ -3609,10 +4039,11 @@ export const App: React.FC = () => {
                     </thead>
                     <tbody>
                       {products.length === 0 ? (
-                        <tr><td colSpan={10} style={{ textAlign: 'center', color: '#6b7280', padding: '16px' }}>No products entered yet. Create your first product on the left!</td></tr>
+                        <tr><td colSpan={12} style={{ textAlign: 'center', color: '#6b7280', padding: '16px' }}>No products entered yet. Create your first product on the left!</td></tr>
                       ) : (
                         products.map((p) => {
                           const cost = (p.costMinorUnits || 0) / 100;
+                          const wholesale = (p.wholesalePriceMinorUnits || 0) / 100;
                           const sell = (p.priceMinorUnits || 0) / 100;
                           const profit = sell - cost;
                           const margin = sell > 0 ? ((profit / sell) * 100).toFixed(1) : '0';
@@ -3624,6 +4055,9 @@ export const App: React.FC = () => {
                               <td className="value" style={{ textAlign: 'left', padding: '6px 8px' }}>{p.sku}</td>
                               <td className="value" style={{ textAlign: 'right', padding: '6px 8px', color: '#64748b' }}>
                                 Rs. {cost.toFixed(2)}
+                              </td>
+                              <td className="value" style={{ textAlign: 'right', padding: '6px 8px', color: '#0284c7', fontWeight: 600 }}>
+                                Rs. {wholesale > 0 ? wholesale.toFixed(2) : '—'}
                               </td>
                               <td className="value ok" style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600 }}>
                                 Rs. {sell.toFixed(2)}
@@ -3640,6 +4074,11 @@ export const App: React.FC = () => {
                                   }}
                                 >
                                   {profit >= 0 ? '+' : ''}Rs. {profit.toFixed(2)} ({margin}%)
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px', background: '#f1f5f9', borderRadius: '4px', color: '#475569' }}>
+                                  &le; {p.reorderPoint ?? 10}
                                 </span>
                               </td>
                               <td className="value" style={{ textAlign: 'left', padding: '6px 8px' }}>{p.barcode ?? '—'}</td>
@@ -3667,11 +4106,13 @@ export const App: React.FC = () => {
                                     setEditCatId(p.categoryId ? String(p.categoryId) : '');
                                     setEditPriceRs(((p.priceMinorUnits || 0) / 100).toFixed(2));
                                     setEditCostRs(((p.costMinorUnits || 0) / 100).toFixed(2));
+                                    setEditWholesalePriceRs(((p.wholesalePriceMinorUnits || 0) / 100).toFixed(2));
+                                    setEditReorderPoint(String(p.reorderPoint ?? 10));
                                     setEditBarcode(p.barcode || '');
                                     setEditProdMsg(null);
                                   }}
                                 >
-                                  ✏️ Edit Price
+                                  ✏️ Edit
                                 </button>
                               </td>
                             </tr>
@@ -3824,6 +4265,8 @@ export const App: React.FC = () => {
                         setEditingGrnNumber('');
                         setGrnPoId('');
                         setGrnSupplierId(suppliers[0] ? String(suppliers[0].id) : '');
+                        const defaultLoc = posLocations.find((l) => l.code === 'WH-MAIN') || posLocations[0];
+                        setGrnLocationId(defaultLoc ? String(defaultLoc.id) : '');
                         setGrnLines([]);
                         setQuickAddVariantId(0);
                         setQuickAddQty(1);
@@ -3893,6 +4336,7 @@ export const App: React.FC = () => {
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>GRN #</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Supplier</th>
+                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Stock Location</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Invoice / Challan</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>PO Reference</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Received Date</th>
@@ -3919,6 +4363,11 @@ export const App: React.FC = () => {
                               </td>
                               <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>
                                 {grn.supplierName}
+                              </td>
+                              <td style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: '#0369a1' }}>
+                                <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '4px' }}>
+                                  {grn.locationName || 'Central Warehouse'}
+                                </span>
                               </td>
                               <td style={{ padding: '10px 14px', color: '#475569' }}>
                                 {grn.supplierInvoiceRef}
@@ -4046,7 +4495,7 @@ export const App: React.FC = () => {
                                     }
                                   }}
                                 >
-                                  View Items
+                                  View / Slip
                                 </button>
                                 {(!grn.paidAmountMinorUnits || grn.paidAmountMinorUnits === 0) && (
                                   <button
@@ -4082,12 +4531,15 @@ export const App: React.FC = () => {
                                     title={`Pay outstanding balance of Rs. ${balanceRs} for ${grn.grnNumber}`}
                                     onClick={() => {
                                       const sup = suppliers.find((s) => s.id === grn.supplierId);
-                                      if (sup) setPaymentSupplier(sup);
-                                      setPaymentAmountRs(balanceRs);
-                                      setPaymentReference(`PAY-${grn.grnNumber}`);
-                                      setPaymentNotes(`Settlement for GRN ${grn.grnNumber} (Inv: ${grn.supplierInvoiceRef})`);
-                                      setPaymentMethod('CASH');
-                                      setShowRecordPaymentModal(true);
+                                      if (sup) {
+                                        openRecordPayment(
+                                          sup,
+                                          balanceRs,
+                                          `PAY-${grn.grnNumber}`,
+                                          `Settlement for GRN ${grn.grnNumber} (Inv: ${grn.supplierInvoiceRef})`,
+                                          grn.id
+                                        );
+                                      }
                                     }}
                                   >
                                     💳 Pay
@@ -4099,7 +4551,7 @@ export const App: React.FC = () => {
                         })}
                         {goodsReceipts.length === 0 && (
                           <tr>
-                            <td colSpan={10} style={{ padding: '36px', textAlign: 'center', color: '#9ca3af' }}>
+                            <td colSpan={11} style={{ padding: '36px', textAlign: 'center', color: '#9ca3af' }}>
                               No Goods Receiving Notes found. Click "+ Receive Goods (GRN)" to record a delivery.
                             </td>
                           </tr>
@@ -4243,6 +4695,8 @@ export const App: React.FC = () => {
                                             }
                                             setEditingGrnId(null);
                                             setEditingGrnNumber('');
+                                            const defaultLoc = posLocations.find((l) => l.code === 'WH-MAIN') || posLocations[0];
+                                            setGrnLocationId(defaultLoc ? String(defaultLoc.id) : '');
                                             setShowCreateGrnModal(true);
                                           }
                                         }
@@ -4294,79 +4748,76 @@ export const App: React.FC = () => {
                       <div
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                          gap: '14px',
-                          marginBottom: '18px',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                          gap: '10px',
+                          marginBottom: '12px',
                         }}
                       >
                         <div
                           style={{
                             background: '#ffffff',
                             border: '1px solid #e2e8f0',
-                            borderRadius: '10px',
-                            padding: '14px 16px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                           }}
                         >
-                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Total Invoiced / Purchases</div>
-                          <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Total Invoiced</div>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
                             Rs. {(totalPurchasesAll / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Total goods received</div>
                         </div>
 
                         <div
                           style={{
                             background: '#ffffff',
                             border: '1px solid #e2e8f0',
-                            borderRadius: '10px',
-                            padding: '14px 16px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                           }}
                         >
-                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Total Payments Settled</div>
-                          <div style={{ fontSize: '20px', fontWeight: 800, color: '#0284c7', marginTop: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Total Settled</div>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0284c7' }}>
                             Rs. {(totalPaidAll / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Cash, Bank & Cheques paid</div>
                         </div>
 
                         <div
                           style={{
                             background: totalOutstandingAll > 0 ? '#fef2f2' : '#f0fdf4',
                             border: `1px solid ${totalOutstandingAll > 0 ? '#fecaca' : '#bbf7d0'}`,
-                            borderRadius: '10px',
-                            padding: '14px 16px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                           }}
                         >
                           <div
                             style={{
-                              fontSize: '12px',
+                              fontSize: '11px',
                               color: totalOutstandingAll > 0 ? '#991b1b' : '#166534',
                               fontWeight: 700,
                             }}
                           >
-                            Total Outstanding Payables (واجب الادا)
+                            Outstanding (واجب الادا)
                           </div>
                           <div
                             style={{
-                              fontSize: '20px',
+                              fontSize: '15px',
                               fontWeight: 900,
                               color: totalOutstandingAll > 0 ? '#dc2626' : '#15803d',
-                              marginTop: '4px',
                             }}
                           >
                             Rs. {(totalOutstandingAll / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '11px',
-                              color: totalOutstandingAll > 0 ? '#b91c1c' : '#15803d',
-                              marginTop: '2px',
-                            }}
-                          >
-                            {totalOutstandingAll > 0 ? 'Remaining liability to suppliers' : 'All accounts fully settled'}
                           </div>
                         </div>
                       </div>
@@ -6442,6 +6893,14 @@ export const App: React.FC = () => {
               currentUserRole={session.role}
             />
           )}
+
+          {/* TAB: RETURNS & COMMERCIAL REVERSALS */}
+          {activeTab === 'returns' && (
+            <ReturnsTab
+              storeId={store?.id || 1}
+              currentUserName={session.displayName || 'admin'}
+            />
+          )}
         </div>
       </main>
 
@@ -6696,12 +7155,19 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* MODAL: CASH CHECKOUT */}
+      {/* MODAL: MULTI-PAYMENT COMMERCIAL & POS CHECKOUT */}
       {showCheckoutModal && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: '440px' }}>
+        <div className="modal-overlay" style={{ zIndex: 99998 }}>
+          <div className="modal-box" style={{ maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px' }}>Cash Sale Checkout</h3>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>
+                  {posOrderType === 'wholesale' ? '💼 Commercial Order Checkout' : '🛒 Sales Terminal Checkout'}
+                </h3>
+                <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>
+                  Location: <strong>{posLocations.find(l => l.id === posSelectedLocationId)?.name || 'Showroom (SR-MAIN)'}</strong>
+                </div>
+              </div>
               <button
                 type="button"
                 className="modal-close"
@@ -6735,194 +7201,504 @@ export const App: React.FC = () => {
                 <div>
                   <strong>Checkout Blocked:</strong>
                   <div style={{ marginTop: '2px' }}>{posError}</div>
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#b91c1c' }}>
-                    💡 <em>Tip: To allow sales when stock is 0 or unreceived, go to <strong>Stock &amp; Inventory</strong> and enable <strong>Allow Negative Stock</strong>.</em>
-                  </div>
                 </div>
               </div>
             )}
 
+            {/* Client / Bill-To Account Banner */}
             <div
               style={{
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
-                padding: '14px',
-                borderRadius: '6px',
-                marginBottom: '16px',
-                textAlign: 'center',
+                background: posSelectedCustomer ? '#f8fafc' : '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                fontSize: '12px',
               }}
             >
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Total Amount Due
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontWeight: 700, color: '#334155' }}>Bill To: </span>
+                  <strong style={{ color: '#0f172a', fontSize: '13px' }}>
+                    {posSelectedCustomer ? posSelectedCustomer.name : 'Walk-In Retail Customer'}
+                  </strong>
+                  {posSelectedCustomer?.companyName && (
+                    <span style={{ color: '#64748b' }}> ({posSelectedCustomer.companyName})</span>
+                  )}
+                </div>
+                {!posSelectedCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCustomerModal(true)}
+                    style={{
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      color: '#1d4ed8',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + Register Client
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#065f46', marginTop: '2px' }}>
+
+              {posSelectedCustomer && (
+                <div style={{ display: 'flex', gap: '14px', marginTop: '6px', fontSize: '11px', color: '#475569', flexWrap: 'wrap' }}>
+                  {posSelectedCustomer.taxNumber && (
+                    <span>NTN: <strong>{posSelectedCustomer.taxNumber}</strong></span>
+                  )}
+                  <span>
+                    Outstanding: <strong style={{ color: (posSelectedCustomer.outstandingBalanceMinorUnits ?? 0) > 0 ? '#dc2626' : '#059669' }}>
+                      Rs. {((posSelectedCustomer.outstandingBalanceMinorUnits ?? 0) / 100).toFixed(2)}
+                    </strong>
+                  </span>
+                  {(posSelectedCustomer.creditLimitMinorUnits ?? 0) > 0 && (
+                    <span>
+                      Limit: <strong>Rs. {((posSelectedCustomer.creditLimitMinorUnits ?? 0) / 100).toFixed(2)}</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Total Amount Due Display */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+                color: '#ffffff',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Total Invoice Amount
+                </div>
+                <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+                  {cart.length} item line{cart.length !== 1 ? 's' : ''} ({posPriceTier === 'wholesale' ? 'Wholesale Rates' : 'Retail Rates'})
+                </div>
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 800, color: '#34d399' }}>
                 Rs. {(cartTotalMinor / 100).toFixed(2)}
               </div>
             </div>
 
+            {/* Payment Method Selector Tabs */}
+            <div style={{ marginBottom: '14px' }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '12px', color: '#334155', marginBottom: '6px', display: 'block' }}>
+                Select Payment Method
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutPaymentMethod('cash')}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    border: checkoutPaymentMethod === 'cash' ? '2px solid #059669' : '1px solid #cbd5e1',
+                    background: checkoutPaymentMethod === 'cash' ? '#ecfdf5' : '#ffffff',
+                    color: checkoutPaymentMethod === 'cash' ? '#065f46' : '#475569',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckoutPaymentMethod('bank_transfer');
+                    setCheckoutAmountPaidRs((cartTotalMinor / 100).toString());
+                  }}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    border: checkoutPaymentMethod === 'bank_transfer' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: checkoutPaymentMethod === 'bank_transfer' ? '#eff6ff' : '#ffffff',
+                    color: checkoutPaymentMethod === 'bank_transfer' ? '#1e40af' : '#475569',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  🏦 Bank IBFT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckoutPaymentMethod('cheque');
+                    setCheckoutAmountPaidRs((cartTotalMinor / 100).toString());
+                  }}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    border: checkoutPaymentMethod === 'cheque' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                    background: checkoutPaymentMethod === 'cheque' ? '#f5f3ff' : '#ffffff',
+                    color: checkoutPaymentMethod === 'cheque' ? '#5b21b6' : '#475569',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  📝 Cheque
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckoutPaymentMethod('credit');
+                    setCheckoutAmountPaidRs('0');
+                  }}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    border: checkoutPaymentMethod === 'credit' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                    background: checkoutPaymentMethod === 'credit' ? '#fffbeb' : '#ffffff',
+                    color: checkoutPaymentMethod === 'credit' ? '#92400e' : '#475569',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  💳 On Account
+                </button>
+              </div>
+            </div>
+
             <form onSubmit={handleCheckoutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>
-                  Amount Received (Cash Tendered) *
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#6b7280', fontSize: '15px' }}>
-                    Rs.
-                  </span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="Enter cash received (e.g. 550)..."
-                    value={tenderedRs}
-                    onChange={(e) => setTenderedRs(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    className="form-input"
-                    style={{ fontSize: '20px', fontWeight: 700, padding: '10px 12px 10px 42px', color: '#111827' }}
-                    required
-                    autoFocus
-                  />
-                </div>
-                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                  Type amount received on keyboard / numpad (e.g. 550), or click a banknote below.
-                </div>
-              </div>
-
-              {/* Quick Cash Buttons - Only real banknotes (100, 500, 1000, 5000) strictly > Total Due */}
-              <div>
-                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', fontWeight: 500 }}>
-                  Banknotes / Quick Tender:
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="tab-btn"
-                    style={{
-                      flex: 1,
-                      minWidth: '85px',
-                      padding: '8px 8px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      background: parseFloat(tenderedRs || '0') === cartTotalMinor / 100 ? '#e0f2fe' : undefined,
-                      borderColor: parseFloat(tenderedRs || '0') === cartTotalMinor / 100 ? '#0284c7' : undefined,
-                    }}
-                    onClick={() => setTenderedRs((cartTotalMinor / 100).toString())}
-                  >
-                    Exact (Rs. {(cartTotalMinor / 100).toFixed(0)})
-                  </button>
-                  {getAvailableNoteButtons(cartTotalMinor / 100).map((denom) => (
-                    <button
-                      key={denom}
-                      type="button"
-                      className="tab-btn"
-                      style={{
-                        flex: 1,
-                        minWidth: '85px',
-                        padding: '8px 8px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        background: parseFloat(tenderedRs || '0') === denom ? '#e0f2fe' : undefined,
-                        borderColor: parseFloat(tenderedRs || '0') === denom ? '#0284c7' : undefined,
-                      }}
-                      onClick={() => setTenderedRs(denom.toString())}
-                    >
-                      Rs. {denom.toLocaleString()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dynamic Return / Change Calculation */}
-              {(() => {
-                const tenderedVal = parseFloat(tenderedRs || '0');
-                const tenderedMinor = Math.round(tenderedVal * 100);
-                const diffMinor = tenderedMinor - cartTotalMinor;
-
-                if (!tenderedRs || isNaN(tenderedVal)) return null;
-
-                if (diffMinor >= 0) {
-                  return (
-                    <div
-                      style={{
-                        background: '#ecfdf5',
-                        border: '1px solid #10b981',
-                        padding: '12px 16px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: '4px',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Change Due (Return Amount)
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#047857' }}>
-                          Return exact cash to customer
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#047857' }}>
-                        Rs. {(diffMinor / 100).toFixed(2)}
-                      </div>
+              {/* PAYMENT DETAILS: CASH */}
+              {checkoutPaymentMethod === 'cash' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>
+                      Cash Tendered by Customer *
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#6b7280', fontSize: '15px' }}>
+                        Rs.
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="Enter cash received..."
+                        value={tenderedRs}
+                        onChange={(e) => setTenderedRs(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="form-input"
+                        style={{ fontSize: '18px', fontWeight: 700, padding: '8px 12px 8px 42px', color: '#111827' }}
+                        required
+                        autoFocus
+                      />
                     </div>
-                  );
-                } else {
-                  return (
-                    <div
-                      style={{
-                        background: '#fef2f2',
-                        border: '1px solid #f87171',
-                        padding: '12px 16px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: '4px',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Remaining Due (Shortage)
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#b91c1c' }}>
-                          Customer needs to provide more cash
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626' }}>
-                        Rs. {(Math.abs(diffMinor) / 100).toFixed(2)}
-                      </div>
-                    </div>
-                  );
-                }
-              })()}
+                  </div>
 
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', fontWeight: 500 }}>
+                      Banknotes / Quick Tender:
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="tab-btn"
+                        style={{
+                          flex: 1,
+                          minWidth: '75px',
+                          padding: '6px 8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          background: parseFloat(tenderedRs || '0') === cartTotalMinor / 100 ? '#e0f2fe' : undefined,
+                        }}
+                        onClick={() => setTenderedRs((cartTotalMinor / 100).toString())}
+                      >
+                        Exact (Rs. {(cartTotalMinor / 100).toFixed(0)})
+                      </button>
+                      {getAvailableNoteButtons(cartTotalMinor / 100).map((denom) => (
+                        <button
+                          key={denom}
+                          type="button"
+                          className="tab-btn"
+                          style={{
+                            flex: 1,
+                            minWidth: '75px',
+                            padding: '6px 8px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: parseFloat(tenderedRs || '0') === denom ? '#e0f2fe' : undefined,
+                          }}
+                          onClick={() => setTenderedRs(denom.toString())}
+                        >
+                          Rs. {denom.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Change Calculation */}
+                  {(() => {
+                    const tenderedVal = parseFloat(tenderedRs || '0');
+                    const tenderedMinor = Math.round(tenderedVal * 100);
+                    const diffMinor = tenderedMinor - cartTotalMinor;
+                    if (!tenderedRs || isNaN(tenderedVal)) return null;
+
+                    if (diffMinor >= 0) {
+                      return (
+                        <div style={{ background: '#ecfdf5', border: '1px solid #10b981', padding: '10px 14px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#065f46' }}>Change Due:</span>
+                          <span style={{ fontSize: '20px', fontWeight: 800, color: '#047857' }}>Rs. {(diffMinor / 100).toFixed(2)}</span>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div style={{ background: '#fef2f2', border: '1px solid #f87171', padding: '10px 14px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#991b1b' }}>Shortage:</span>
+                          <span style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626' }}>Rs. {(Math.abs(diffMinor) / 100).toFixed(2)}</span>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+
+              {/* PAYMENT DETAILS: BANK TRANSFER */}
+              {checkoutPaymentMethod === 'bank_transfer' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="form-label">Receiving Bank *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Meezan Bank / HBL"
+                        value={checkoutBankName}
+                        onChange={(e) => setCheckoutBankName(e.target.value)}
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">IBFT / Txn Reference #</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. IBFT-9842187"
+                        value={checkoutReferenceNote}
+                        onChange={(e) => setCheckoutReferenceNote(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label">Amount Transferred (Rs.) *</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="form-input"
+                      value={checkoutAmountPaidRs}
+                      onChange={(e) => setCheckoutAmountPaidRs(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* PAYMENT DETAILS: CHEQUE */}
+              {checkoutPaymentMethod === 'cheque' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="form-label">Bank Name *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. MCB Bank"
+                        value={checkoutBankName}
+                        onChange={(e) => setCheckoutBankName(e.target.value)}
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Cheque Number *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. CHQ-445892"
+                        value={checkoutReferenceNote}
+                        onChange={(e) => setCheckoutReferenceNote(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="form-label">Cheque Clearing Date</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={checkoutChequeDate}
+                        onChange={(e) => setCheckoutChequeDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Cheque Amount (Rs.) *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="form-input"
+                        value={checkoutAmountPaidRs}
+                        onChange={(e) => setCheckoutAmountPaidRs(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PAYMENT DETAILS: CREDIT / ON ACCOUNT */}
+              {checkoutPaymentMethod === 'credit' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {!posSelectedCustomer && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '8px 12px', color: '#92400e', fontSize: '11.5px' }}>
+                      ⚠️ <strong>Client Required:</strong> On-Account Credit requires selecting or registering a Client above.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="form-label">Advance / Down Payment (Rs.)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="form-input"
+                        placeholder="0.00 if fully unpaid"
+                        value={checkoutAmountPaidRs}
+                        onChange={(e) => setCheckoutAmountPaidRs(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Payment Terms</label>
+                      <select
+                        className="form-input"
+                        value={checkoutPaymentTerms}
+                        onChange={(e) => setCheckoutPaymentTerms(e.target.value)}
+                      >
+                        <option value="Net 15">Net 15 Days</option>
+                        <option value="Net 30">Net 30 Days</option>
+                        <option value="Net 45">Net 45 Days</option>
+                        <option value="Net 60">Net 60 Days</option>
+                        <option value="Custom">Custom Terms</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label className="form-label">Payment Due Date</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={checkoutDueDate}
+                        onChange={(e) => setCheckoutDueDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">PO / Order Reference #</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Client PO # / Note"
+                        value={checkoutReferenceNote}
+                        onChange={(e) => setCheckoutReferenceNote(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Calculated Balance Due on Account */}
+                  {(() => {
+                    const paidMinor = Math.round(parseFloat(checkoutAmountPaidRs || '0') * 100);
+                    const balDueMinor = Math.max(0, cartTotalMinor - paidMinor);
+                    return (
+                      <div
+                        style={{
+                          background: '#fffbeb',
+                          border: '1px solid #fde68a',
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#92400e' }}>
+                            Remaining Balance Added to Account
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: '#b45309' }}>
+                            Invoice Status: <strong>{balDueMinor === 0 ? 'PAID' : paidMinor > 0 ? 'PARTIAL' : 'UNPAID'}</strong>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '20px', fontWeight: 800, color: '#b45309' }}>
+                          Rs. {(balDueMinor / 100).toFixed(2)}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Modal Actions */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
-                <button type="button" className="btn-secondary" onClick={() => { setShowCheckoutModal(false); setPosError(null); }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowCheckoutModal(false);
+                    setPosError(null);
+                  }}
+                >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={!tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor}
+                  disabled={
+                    (checkoutPaymentMethod === 'cash' && (!tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor)) ||
+                    (checkoutPaymentMethod === 'credit' && !posSelectedCustomer)
+                  }
                   style={{
                     backgroundColor:
-                      !tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor
+                      (checkoutPaymentMethod === 'cash' && (!tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor)) ||
+                      (checkoutPaymentMethod === 'credit' && !posSelectedCustomer)
                         ? '#9ca3af'
+                        : posOrderType === 'wholesale'
+                        ? '#3730a3'
                         : '#059669',
                     borderColor:
-                      !tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor
+                      (checkoutPaymentMethod === 'cash' && (!tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor)) ||
+                      (checkoutPaymentMethod === 'credit' && !posSelectedCustomer)
                         ? '#9ca3af'
+                        : posOrderType === 'wholesale'
+                        ? '#312e81'
                         : '#047857',
                     padding: '8px 18px',
                     fontSize: '13px',
-                    cursor:
-                      !tenderedRs || Math.round(parseFloat(tenderedRs || '0') * 100) < cartTotalMinor
-                        ? 'not-allowed'
-                        : 'pointer',
+                    fontWeight: 700,
                   }}
                 >
-                  Confirm Sale (Print Receipt)
+                  {posOrderType === 'wholesale' ? '💼 Generate Commercial Invoice' : 'Confirm Sale (Print Receipt)'}
                 </button>
               </div>
             </form>
@@ -6930,27 +7706,240 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: RECEIPT PREVIEW (80mm Thermal Receipt Layout) */}
+      {/* MODAL: QUICK ADD NEW CLIENT */}
+      {showNewCustomerModal && (
+        <div className="modal-overlay" style={{ zIndex: 100000 }}>
+          <div className="modal-box" style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>👤 New Client / Wholesale Account</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => {
+                  setShowNewCustomerModal(false);
+                  setPosCustError(null);
+                }}
+                style={{ background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {posCustError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #f87171', borderRadius: '6px', padding: '10px 14px', color: '#991b1b', fontSize: '12px', marginBottom: '12px' }}>
+                {posCustError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCustomerSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label className="form-label">Contact / Client Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={posCustName}
+                    onChange={(e) => setPosCustName(e.target.value)}
+                    placeholder="e.g. Muhammad Usman"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Company / Trade Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={posCustCompany}
+                    onChange={(e) => setPosCustCompany(e.target.value)}
+                    placeholder="e.g. Usman Trading Co."
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label className="form-label">Phone Number</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={posCustPhone}
+                    onChange={(e) => setPosCustPhone(e.target.value)}
+                    placeholder="0300-1234567"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">NTN / Tax Number</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={posCustTaxNo}
+                    onChange={(e) => setPosCustTaxNo(e.target.value)}
+                    placeholder="e.g. 1234567-8"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Billing / Shipping Address</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={posCustAddress}
+                  onChange={(e) => setPosCustAddress(e.target.value)}
+                  placeholder="Market, City, Area"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label className="form-label">Account Type</label>
+                  <select
+                    className="form-input"
+                    value={posCustType}
+                    onChange={(e) => setPosCustType(e.target.value as 'wholesale' | 'retail')}
+                  >
+                    <option value="wholesale">Wholesale Client</option>
+                    <option value="retail">Retail Account</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Credit Limit (Rs.)</label>
+                  <input
+                    type="number"
+                    step="1000"
+                    className="form-input"
+                    value={posCustCreditLimitRs}
+                    onChange={(e) => setPosCustCreditLimitRs(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Terms (Days)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={posCustTermsDays}
+                    onChange={(e) => setPosCustTermsDays(e.target.value)}
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowNewCustomerModal(false);
+                    setPosCustError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={savingPosCust}
+                  style={{ background: '#3730a3', borderColor: '#312e81' }}
+                >
+                  {savingPosCust ? 'Saving...' : 'Save & Select Client'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DUAL-FORMAT INVOICE & RECEIPT PREVIEW (Commercial A4 & 80mm Thermal) */}
       {lastReceipt && (
         <div className="modal-overlay" style={{ zIndex: 99999 }}>
           <div
             className="modal-box"
             style={{
-              maxWidth: '380px',
+              maxWidth: receiptViewMode === 'commercial' ? '820px' : '400px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: '92vh',
               display: 'flex',
               flexDirection: 'column',
               fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-              padding: '14px 14px 10px',
+              padding: '14px 18px 12px',
               background: '#ffffff',
               borderRadius: '10px',
               color: '#000000',
               boxShadow: '0 20px 45px -10px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.1)',
               overflow: 'hidden',
+              transition: 'max-width 0.2s ease',
             }}
           >
-            {/* Scrollable Receipt Area */}
+            {/* Top View Mode Switcher Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingBottom: '10px',
+                marginBottom: '10px',
+                borderBottom: '1px solid #e2e8f0',
+              }}
+              className="no-print"
+            >
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setReceiptViewMode('commercial')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    border: receiptViewMode === 'commercial' ? '2px solid #3730a3' : '1px solid #cbd5e1',
+                    background: receiptViewMode === 'commercial' ? '#e0e7ff' : '#f8fafc',
+                    color: receiptViewMode === 'commercial' ? '#3730a3' : '#475569',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>📄</span> A4 Commercial Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptViewMode('thermal')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    border: receiptViewMode === 'thermal' ? '2px solid #059669' : '1px solid #cbd5e1',
+                    background: receiptViewMode === 'thermal' ? '#ecfdf5' : '#f8fafc',
+                    color: receiptViewMode === 'thermal' ? '#065f46' : '#475569',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>🖨️</span> 80mm POS Thermal
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setLastReceipt(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Document Area */}
             <div
               style={{
                 flex: 1,
@@ -6960,195 +7949,369 @@ export const App: React.FC = () => {
                 paddingBottom: '8px',
               }}
             >
-              {/* Printable Receipt Area for 80mm Thermal Printer */}
-              <div id="printable-sale-receipt" style={{ width: '100%', maxWidth: '78mm', margin: '0 auto', padding: '0 1.5mm', color: '#000000', boxSizing: 'border-box' }}>
-              {/* Receipt Header */}
-              <div style={{ textAlign: 'center', borderBottom: '1.5px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>
-                  <MezaanLogo size={46} theme="light" />
-                </div>
-                <h2
-                  style={{
-                    fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif",
-                    fontSize: '21px',
-                    fontWeight: 800,
-                    color: '#000000',
-                    margin: '0 0 2px 0',
-                    lineHeight: 1.3,
-                  }}
-                >
-                  میزان سویٹس اینڈ بیکرز
-                </h2>
-                <div style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '1px', color: '#000000', textTransform: 'uppercase' }}>
-                  MEZAAN SWEETS &amp; BAKERS
-                </div>
-                <div style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontSize: '11px', fontWeight: 700, color: '#000000', margin: '2px 0' }}>
-                  تازہ اور معیاری مٹھائیوں کا مرکز
-                </div>
+              {/* VIEW 1: COMMERCIAL TAX INVOICE (A4) */}
+              {receiptViewMode === 'commercial' ? (
+                <div id="printable-commercial-invoice" style={{ background: '#ffffff', color: '#0f172a', padding: '10px' }}>
+                  {/* Letterhead Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0f172a', paddingBottom: '12px', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <RzLogo size={52} theme="light" />
+                      <div>
+                        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a', letterSpacing: '0.5px' }}>
+                          RZ ENTERPRISES
+                        </h1>
+                        <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#475569' }}>
+                          Commercial Sales, Distribution &amp; Wholesale Supplies
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          NTN: <strong>5195484-9</strong> &bull; Sialkot Road, Gujranwala, Pakistan
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Address & Contacts */}
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#000000', marginTop: '3px', lineHeight: 1.3 }}>
-                  <div>📍 چک نمبر 24 ج ب لاہوریاں</div>
-                </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div
+                        style={{
+                          display: 'inline-block',
+                          background: '#0f172a',
+                          color: '#ffffff',
+                          padding: '4px 12px',
+                          borderRadius: '4px',
+                          fontSize: '13px',
+                          fontWeight: 800,
+                          letterSpacing: '1px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        TAX INVOICE
+                      </div>
+                      <div style={{ fontSize: '12px', fontWeight: 800, marginTop: '6px', color: '#0f172a' }}>
+                        # {lastReceipt.invoiceNumber}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>
+                        Date: {formatDateTime(lastReceipt.createdAtUtc)}
+                      </div>
+                    </div>
+                  </div>
 
-                {/* Contact Persons & Numbers (Right-aligned Urdu with distinct numbers) */}
-                <div
-                  style={{
-                    marginTop: '5px',
-                    fontSize: '11px',
-                    lineHeight: 1.5,
-                    direction: 'rtl',
-                    textAlign: 'right',
-                    borderTop: '1px dashed #000000',
-                    borderBottom: '1px dashed #000000',
-                    padding: '4px 6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری تبسم بگوایہ :</span>
-                    <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0343-7763677</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری عبدالرؤف بگوایہ :</span>
-                    <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0309-8809054</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری محسن بگوایہ :</span>
-                    <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0301-6008625</span>
-                  </div>
-                </div>
+                  {/* Customer / Bill To & Invoice Meta Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px', marginBottom: '14px', fontSize: '12px' }}>
+                    <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Bill To (Customer):
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: '14px', color: '#0f172a' }}>
+                        {lastReceipt.customerName || 'Walk-In Retail Customer'}
+                      </div>
+                      {lastReceipt.customerCompanyName && (
+                        <div style={{ fontWeight: 600, color: '#334155', fontSize: '12px' }}>
+                          {lastReceipt.customerCompanyName}
+                        </div>
+                      )}
+                      {lastReceipt.customerTaxNumber && (
+                        <div style={{ color: '#475569', fontSize: '11px', marginTop: '2px' }}>
+                          NTN / STRN: <strong>{lastReceipt.customerTaxNumber}</strong>
+                        </div>
+                      )}
+                      {lastReceipt.customerPhone && (
+                        <div style={{ color: '#475569', fontSize: '11px' }}>
+                          Phone: {lastReceipt.customerPhone}
+                        </div>
+                      )}
+                      {lastReceipt.customerAddress && (
+                        <div style={{ color: '#64748b', fontSize: '11px' }}>
+                          Address: {lastReceipt.customerAddress}
+                        </div>
+                      )}
+                    </div>
 
-                {/* Invoice Metadata Box (Clean, bold, non-overlapping) */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '3px',
-                    fontSize: '12px',
-                    color: '#000000',
-                    textAlign: 'left',
-                    borderTop: '1.5px dashed #000000',
-                    paddingTop: '6px',
-                    marginTop: '8px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 900, fontSize: '12.5px' }}>INVOICE: <strong>{lastReceipt.invoiceNumber}</strong></span>
-                    <span style={{ fontWeight: 700 }}>CASHIER: <strong>{lastReceipt.cashierId || session?.displayName || 'Staff'}</strong></span>
+                    <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Order Mode:</span>
+                        <strong style={{ textTransform: 'capitalize' }}>{lastReceipt.orderType || 'Retail'}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Payment Method:</span>
+                        <strong style={{ textTransform: 'uppercase' }}>{(lastReceipt.paymentMethod || 'CASH').replace('_', ' ')}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Payment Status:</span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '11px',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: lastReceipt.paymentStatus === 'paid' ? '#dcfce7' : lastReceipt.paymentStatus === 'partial' ? '#fef3c7' : '#fee2e2',
+                            color: lastReceipt.paymentStatus === 'paid' ? '#15803d' : lastReceipt.paymentStatus === 'partial' ? '#b45309' : '#b91c1c',
+                          }}
+                        >
+                          {(lastReceipt.paymentStatus || 'PAID').toUpperCase()}
+                        </span>
+                      </div>
+                      {lastReceipt.paymentTerms && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748b' }}>Terms:</span>
+                          <strong>{lastReceipt.paymentTerms}</strong>
+                        </div>
+                      )}
+                      {lastReceipt.dueDate && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748b' }}>Due Date:</span>
+                          <strong style={{ color: '#dc2626' }}>{lastReceipt.dueDate}</strong>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '11.5px', marginTop: '1px' }}>
-                    DATE: <strong>{formatDateTime(lastReceipt.createdAtUtc)}</strong>
-                  </div>
-                </div>
-              </div>
 
-              {/* Items Table with 80mm calibrated full widths */}
-              <table style={{ width: '100%', fontSize: '11.5px', borderCollapse: 'collapse', marginBottom: '8px', tableLayout: 'fixed' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #000000', color: '#000000' }}>
-                    <th style={{ width: '48%', textAlign: 'left', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Item</th>
-                    <th style={{ width: '14%', textAlign: 'center', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Qty</th>
-                    <th style={{ width: '18%', textAlign: 'right', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Price</th>
-                    <th style={{ width: '20%', textAlign: 'right', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastReceipt.items.map((item, idx) => {
-                    const unitPrice = item.quantity > 0 ? (item.totalMinorUnits / item.quantity / 100).toFixed(2) : '0.00';
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px dashed #444444' }}>
-                        <td style={{ width: '48%', padding: '4px 2px 4px 0', fontWeight: 700, wordBreak: 'break-word', lineHeight: 1.25 }}>
-                          {item.productName}
-                        </td>
-                        <td style={{ width: '14%', textAlign: 'center', padding: '4px 0', fontWeight: 700, verticalAlign: 'top' }}>
-                          {item.quantity}
-                        </td>
-                        <td style={{ width: '18%', textAlign: 'right', padding: '4px 0', fontWeight: 700, verticalAlign: 'top' }}>
-                          {unitPrice}
-                        </td>
-                        <td style={{ width: '20%', textAlign: 'right', padding: '4px 0', fontWeight: 800, verticalAlign: 'top' }}>
-                          {(item.totalMinorUnits / 100).toFixed(2)}
-                        </td>
+                  {/* Items Table */}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '14px' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1' }}>
+                        <th style={{ textAlign: 'left', padding: '8px 6px', width: '38%' }}>Item Description</th>
+                        <th style={{ textAlign: 'center', padding: '8px 6px', width: '14%' }}>SKU / Tier</th>
+                        <th style={{ textAlign: 'center', padding: '8px 6px', width: '14%' }}>Qty</th>
+                        <th style={{ textAlign: 'right', padding: '8px 6px', width: '16%' }}>Rate (PKR)</th>
+                        <th style={{ textAlign: 'right', padding: '8px 6px', width: '18%' }}>Amount (PKR)</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {lastReceipt.items.map((it, idx) => {
+                        const unitRate = it.quantity > 0 ? (it.totalMinorUnits / it.quantity / 100).toFixed(2) : '0.00';
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '8px 6px', fontWeight: 600 }}>{it.productName}</td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center', fontSize: '11px', color: '#64748b' }}>
+                              <span>{it.sku || '-'}</span>
+                              <div style={{ fontSize: '10px', textTransform: 'capitalize' }}>{it.priceTier || 'retail'}</div>
+                            </td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700 }}>{it.quantity}</td>
+                            <td style={{ padding: '8px 6px', textAlign: 'right' }}>{unitRate}</td>
+                            <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700 }}>
+                              {(it.totalMinorUnits / 100).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
 
-              {/* Financial Totals */}
-              <div style={{ borderTop: '1.5px dashed #000000', paddingTop: '6px', fontSize: '12px', lineHeight: 1.45 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '3px' }}>
-                  <span>Subtotal:</span>
-                  <span>Rs. {(lastReceipt.subtotalMinorUnits / 100).toFixed(2)}</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontWeight: 900,
-                    fontSize: '18px',
-                    margin: '6px 0',
-                    borderTop: '2px solid #000000',
-                    borderBottom: '2px solid #000000',
-                    padding: '5px 0',
-                    color: '#000000',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  <span>TOTAL DUE:</span>
-                  <span>Rs. {(lastReceipt.totalMinorUnits / 100).toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, margin: '3px 0' }}>
-                  <span>Amount Tendered:</span>
-                  <span>Rs. {(lastReceipt.amountTenderedMinorUnits / 100).toFixed(2)}</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontWeight: 900,
-                    color: '#000000',
-                    fontSize: '14px',
-                    marginTop: '4px',
-                  }}
-                >
-                  <span>CHANGE DUE:</span>
-                  <span>Rs. {(lastReceipt.changeDueMinorUnits / 100).toFixed(2)}</span>
-                </div>
-              </div>
+                  {/* Financials & Balance Summary */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', alignItems: 'start' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px' }}>Bank &amp; Contact Information:</div>
+                      <div>Meezan Bank Ltd &bull; Account Title: RZ Enterprises</div>
+                      <div>Contact: 0343-7763677 / 0309-8809054 / 0301-6008625</div>
+                      <div style={{ marginTop: '8px', fontStyle: 'italic' }}>
+                        * This is a computer generated commercial tax invoice.
+                      </div>
+                    </div>
 
-              {/* Receipt Footer Messages */}
-              <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1.5px dashed #000000', paddingTop: '6px' }}>
-                <div
-                  style={{
-                    fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif",
-                    fontSize: '13px',
-                    color: '#000000',
-                    fontWeight: 800,
-                    marginBottom: '2px',
-                  }}
-                >
-                  "ذائقہ ہمارا، پہچان آپ کی"
+                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#64748b' }}>Subtotal:</span>
+                        <span>Rs. {(lastReceipt.subtotalMinorUnits / 100).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '14px', borderTop: '1px solid #cbd5e1', paddingTop: '6px', marginBottom: '6px', color: '#0f172a' }}>
+                        <span>Total Payable:</span>
+                        <span>Rs. {(lastReceipt.totalMinorUnits / 100).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#059669', fontWeight: 700 }}>
+                        <span>Amount Paid / Tendered:</span>
+                        <span>Rs. {(lastReceipt.amountPaidMinorUnits ? (lastReceipt.amountPaidMinorUnits / 100).toFixed(2) : (lastReceipt.amountTenderedMinorUnits / 100).toFixed(2))}</span>
+                      </div>
+                      {(lastReceipt.balanceDueMinorUnits ?? 0) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #fecaca', paddingTop: '6px', color: '#dc2626', fontWeight: 800, fontSize: '14px' }}>
+                          <span>Balance Due (On Account):</span>
+                          <span>Rs. {((lastReceipt.balanceDueMinorUnits ?? 0) / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {lastReceipt.changeDueMinorUnits > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0284c7', fontWeight: 700 }}>
+                          <span>Change Returned:</span>
+                          <span>Rs. {(lastReceipt.changeDueMinorUnits / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Signatures */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', paddingTop: '10px', fontSize: '11px', color: '#64748b' }}>
+                    <div style={{ borderTop: '1px solid #94a3b8', width: '180px', textAlign: 'center', paddingTop: '4px' }}>
+                      Prepared By: {lastReceipt.cashierId || 'Staff'}
+                    </div>
+                    <div style={{ borderTop: '1px solid #94a3b8', width: '200px', textAlign: 'center', paddingTop: '4px' }}>
+                      Authorized Signature &amp; Stamp
+                    </div>
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif",
-                    fontSize: '10.5px',
-                    color: '#000000',
-                    fontWeight: 600,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  شادی بیاہ، سالگرہ اور دیگر تقریبات کیلئے مال آرڈر پر بھی تیار کیا جاتا ہے
+              ) : (
+                /* VIEW 2: 80MM THERMAL RECEIPT */
+                <div id="printable-sale-receipt" style={{ width: '100%', maxWidth: '78mm', margin: '0 auto', padding: '0 1.5mm', color: '#000000', boxSizing: 'border-box' }}>
+                  {/* Receipt Header */}
+                  <div style={{ textAlign: 'center', borderBottom: '1.5px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>
+                      <RzLogo size={46} theme="light" />
+                    </div>
+                    <h2
+                      style={{
+                        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: '18px',
+                        fontWeight: 900,
+                        color: '#000000',
+                        margin: '0 0 2px 0',
+                        lineHeight: 1.2,
+                        letterSpacing: '0.8px',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      RZ ENTERPRISES
+                    </h2>
+                    <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '1px', color: '#000000', textTransform: 'uppercase' }}>
+                      Commercial Sales &amp; Invoicing
+                    </div>
+
+                    {/* Contact Persons & Numbers */}
+                    <div
+                      style={{
+                        marginTop: '5px',
+                        fontSize: '11px',
+                        lineHeight: 1.5,
+                        direction: 'rtl',
+                        textAlign: 'right',
+                        borderTop: '1px dashed #000000',
+                        borderBottom: '1px dashed #000000',
+                        padding: '4px 6px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری تبسم بگوایہ :</span>
+                        <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0343-7763677</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری عبدالرؤف بگوایہ :</span>
+                        <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0309-8809054</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: "'Noto Nastaliq Urdu', 'Urdu Typesetting', Tahoma, serif", fontWeight: 700 }}>چوہدری محسن بگوایہ :</span>
+                        <span style={{ direction: 'ltr', fontWeight: 800, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '11.5px' }}>0301-6008625</span>
+                      </div>
+                    </div>
+
+                    {/* Invoice Metadata Box */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px',
+                        fontSize: '12px',
+                        color: '#000000',
+                        textAlign: 'left',
+                        borderTop: '1.5px dashed #000000',
+                        paddingTop: '6px',
+                        marginTop: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 900, fontSize: '12.5px' }}>INVOICE: <strong>{lastReceipt.invoiceNumber}</strong></span>
+                        <span style={{ fontWeight: 700 }}>CASHIER: <strong>{lastReceipt.cashierId || session?.displayName || 'Staff'}</strong></span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '11.5px', marginTop: '1px' }}>
+                        DATE: <strong>{formatDateTime(lastReceipt.createdAtUtc)}</strong>
+                      </div>
+                      {lastReceipt.customerName && (
+                        <div style={{ fontWeight: 800, fontSize: '11.5px', marginTop: '1px' }}>
+                          CUSTOMER: <strong>{lastReceipt.customerName}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Items Table */}
+                  <table style={{ width: '100%', fontSize: '11.5px', borderCollapse: 'collapse', marginBottom: '8px', tableLayout: 'fixed' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #000000', color: '#000000' }}>
+                        <th style={{ width: '48%', textAlign: 'left', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Item</th>
+                        <th style={{ width: '14%', textAlign: 'center', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Qty</th>
+                        <th style={{ width: '18%', textAlign: 'right', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Price</th>
+                        <th style={{ width: '20%', textAlign: 'right', padding: '4px 0', fontWeight: 800, textTransform: 'uppercase' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lastReceipt.items.map((item, idx) => {
+                        const unitPrice = item.quantity > 0 ? (item.totalMinorUnits / item.quantity / 100).toFixed(2) : '0.00';
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px dashed #444444' }}>
+                            <td style={{ width: '48%', padding: '4px 2px 4px 0', fontWeight: 700, wordBreak: 'break-word', lineHeight: 1.25 }}>
+                              {item.productName}
+                            </td>
+                            <td style={{ width: '14%', textAlign: 'center', padding: '4px 0', fontWeight: 700, verticalAlign: 'top' }}>
+                              {item.quantity}
+                            </td>
+                            <td style={{ width: '18%', textAlign: 'right', padding: '4px 0', fontWeight: 700, verticalAlign: 'top' }}>
+                              {unitPrice}
+                            </td>
+                            <td style={{ width: '20%', textAlign: 'right', padding: '4px 0', fontWeight: 800, verticalAlign: 'top' }}>
+                              {(item.totalMinorUnits / 100).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Financial Totals */}
+                  <div style={{ borderTop: '1.5px dashed #000000', paddingTop: '6px', fontSize: '12px', lineHeight: 1.45 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '3px' }}>
+                      <span>Subtotal:</span>
+                      <span>Rs. {(lastReceipt.subtotalMinorUnits / 100).toFixed(2)}</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 900,
+                        fontSize: '18px',
+                        margin: '6px 0',
+                        borderTop: '2px solid #000000',
+                        borderBottom: '2px solid #000000',
+                        padding: '5px 0',
+                        color: '#000000',
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      <span>TOTAL DUE:</span>
+                      <span>Rs. {(lastReceipt.totalMinorUnits / 100).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, margin: '3px 0' }}>
+                      <span>Amount Received:</span>
+                      <span>Rs. {(lastReceipt.amountPaidMinorUnits ? (lastReceipt.amountPaidMinorUnits / 100).toFixed(2) : (lastReceipt.amountTenderedMinorUnits / 100).toFixed(2))}</span>
+                    </div>
+                    {(lastReceipt.balanceDueMinorUnits ?? 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, color: '#dc2626', fontSize: '13px' }}>
+                        <span>BALANCE DUE:</span>
+                        <span>Rs. {((lastReceipt.balanceDueMinorUnits ?? 0) / 100).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {lastReceipt.changeDueMinorUnits > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, color: '#000000', fontSize: '14px', marginTop: '4px' }}>
+                        <span>CHANGE DUE:</span>
+                        <span>Rs. {(lastReceipt.changeDueMinorUnits / 100).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Receipt Footer Messages */}
+                  <div style={{ textAlign: 'center', marginTop: '10px', borderTop: '1.5px dashed #000000', paddingTop: '6px' }}>
+                    <p style={{ fontSize: '11px', color: '#000000', margin: '4px 0 0 0', fontWeight: 800 }}>
+                      Thank you for doing business with RZ Enterprises!
+                    </p>
+                  </div>
                 </div>
-                <p style={{ fontSize: '11px', color: '#000000', margin: '4px 0 0 0', fontWeight: 800 }}>
-                  Thank you for visiting Mezaan Sweets!
-                </p>
-              </div>
+              )}
             </div>
-            </div>
 
-            {/* Permanent Sticky Action Bar - Always visible regardless of receipt length */}
+            {/* Permanent Sticky Action Bar */}
             <div
               style={{
                 flexShrink: 0,
@@ -7177,21 +8340,33 @@ export const App: React.FC = () => {
                   padding: '10px 12px',
                   fontWeight: 700,
                   fontSize: '13px',
-                  background: '#d97706',
-                  borderColor: '#b45309',
+                  background: receiptViewMode === 'commercial' ? '#3730a3' : '#d97706',
+                  borderColor: receiptViewMode === 'commercial' ? '#312e81' : '#b45309',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: isPrintingReceipt ? 'not-allowed' : 'pointer',
                   opacity: isPrintingReceipt ? 0.85 : 1,
-                  boxShadow: '0 2px 8px rgba(217, 119, 6, 0.4)',
+                  boxShadow: receiptViewMode === 'commercial' ? '0 2px 8px rgba(55, 48, 163, 0.4)' : '0 2px 8px rgba(217, 119, 6, 0.4)',
                 }}
                 disabled={isPrintingReceipt}
                 autoFocus
-                onClick={() => handlePrintReceipt(lastReceipt)}
+                onClick={() => {
+                  if (receiptViewMode === 'commercial') {
+                    window.print();
+                  } else {
+                    handlePrintReceipt(lastReceipt);
+                  }
+                }}
               >
-                {isPrintingReceipt ? '⏳ Printing...' : receiptPrintFeedback ? receiptPrintFeedback : '🖨️ Print (80mm) [↵ Enter]'}
+                {receiptViewMode === 'commercial'
+                  ? '🖨️ Print Commercial Invoice (A4)'
+                  : isPrintingReceipt
+                  ? '⏳ Printing...'
+                  : receiptPrintFeedback
+                  ? receiptPrintFeedback
+                  : '🖨️ Print (80mm) [↵ Enter]'}
               </button>
             </div>
           </div>
@@ -7683,6 +8858,23 @@ export const App: React.FC = () => {
                     <span style={{ fontSize: '11px', color: '#64748b' }}>Purchase cost from supplier</span>
                   </div>
                   <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#0284c7' }}>
+                      Wholesale Price (Rs.)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={pWholesalePrice}
+                      onChange={(e) => setPWholesalePrice(e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. 120.00"
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Bulk / wholesale selling price</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
                     <label className="form-label" style={{ fontWeight: 700, color: '#059669' }}>
                       Sale Price / Retail (Rs.) *
                     </label>
@@ -7696,6 +8888,21 @@ export const App: React.FC = () => {
                       required
                     />
                     <span style={{ fontSize: '11px', color: '#64748b' }}>Retail selling price in POS</span>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#b45309' }}>
+                      Reorder Alert Point
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={pReorderPoint}
+                      onChange={(e) => setPReorderPoint(e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. 10"
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Trigger low stock badge below this</span>
                   </div>
                 </div>
 
@@ -8039,6 +9246,23 @@ export const App: React.FC = () => {
                     <span style={{ fontSize: '11px', color: '#64748b' }}>Purchase cost per unit</span>
                   </div>
                   <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#0284c7' }}>
+                      Wholesale Price (Rs.)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="form-input"
+                      value={editWholesalePriceRs}
+                      onChange={(e) => setEditWholesalePriceRs(e.target.value)}
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Bulk / wholesale selling price</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
                     <label className="form-label" style={{ fontWeight: 700, color: '#059669' }}>
                       Sale Retail Price (Rs.) *
                     </label>
@@ -8052,6 +9276,20 @@ export const App: React.FC = () => {
                       required
                     />
                     <span style={{ fontSize: '11px', color: '#64748b' }}>Selling price in POS checkout</span>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#b45309' }}>
+                      Reorder Alert Point
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      className="form-input"
+                      value={editReorderPoint}
+                      onChange={(e) => setEditReorderPoint(e.target.value)}
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Trigger low stock badge below this</span>
                   </div>
                 </div>
 
@@ -8511,7 +9749,7 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: '12px' }}>
                   <div>
                     <label className="form-label">Supplier *</label>
                     <select
@@ -8538,7 +9776,22 @@ export const App: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Supplier Invoice / Delivery Challan Ref *</label>
+                    <label className="form-label">Destination Stock Location *</label>
+                    <select
+                      className="form-select"
+                      value={grnLocationId}
+                      onChange={(e) => setGrnLocationId(e.target.value)}
+                      required
+                    >
+                      {posLocations.map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name} ({loc.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Invoice / Challan Ref *</label>
                     <input
                       type="text"
                       className="form-input"
@@ -9480,9 +10733,9 @@ export const App: React.FC = () => {
       {/* MODAL: VIEW GRN DETAILS */}
       {selectedGrnDetail && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '640px' }}>
+          <div className="modal-card" style={{ maxWidth: '750px' }}>
             <div className="modal-header">
-              <span className="modal-title">📦 GRN Details — {selectedGrnDetail.grnNumber}</span>
+              <span className="modal-title">📦 GRN Details & Receiving Slip — {selectedGrnDetail.grnNumber}</span>
               <button
                 type="button"
                 className="modal-close"
@@ -9492,80 +10745,123 @@ export const App: React.FC = () => {
               </button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
-                <div>Supplier: <strong>{selectedGrnDetail.supplierName}</strong></div>
-                <div>Invoice Ref: <strong>{selectedGrnDetail.supplierInvoiceRef}</strong></div>
-                <div>Received Date: <strong>{formatDateTime(selectedGrnDetail.receivedDateUtc)}</strong></div>
-                <div>Status: <strong style={{ color: '#059669' }}>● {selectedGrnDetail.status}</strong></div>
-                {selectedGrnDetail.poNumber && (
-                  <div>Linked PO: <strong>{selectedGrnDetail.poNumber}</strong></div>
-                )}
-                {selectedGrnDetail.notes && (
-                  <div style={{ gridColumn: 'span 2', color: '#64748b' }}>
-                    Notes: {selectedGrnDetail.notes}
+              <div id="printable-grn-slip">
+                {/* Official Printable Header */}
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '10px', marginBottom: '14px' }}>
+                  <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>
+                    RZ ENTERPRISES
+                  </h2>
+                  <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
+                    Wholesale Sanitary Ware, Fittings, Pipe Solutions & Hardware
                   </div>
-                )}
-              </div>
+                  <div style={{ display: 'inline-block', marginTop: '6px', padding: '3px 12px', borderRadius: '4px', background: '#0f172a', color: '#ffffff', fontSize: '12px', fontWeight: 800 }}>
+                    GOODS RECEIPT NOTE (GRN / RECEIVING CHALLAN)
+                  </div>
+                </div>
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>Received Line Items & Lots</h4>
-                <table className="data-table">
-                  <thead>
-                    <tr style={{ background: '#f8fafc' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>Item</th>
-                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>SKU</th>
-                      <th style={{ textAlign: 'center', padding: '6px 10px' }}>Qty</th>
-                      <th style={{ textAlign: 'right', padding: '6px 10px' }}>Unit Cost</th>
-                      <th style={{ textAlign: 'right', padding: '6px 10px' }}>Total</th>
-                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>Lot # / Expiry</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(selectedGrnDetail.lines ?? []).map((line) => (
-                      <tr key={line.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '6px 10px', fontWeight: 600 }}>{line.productName}</td>
-                        <td style={{ padding: '6px 10px', color: '#64748b' }}>{line.sku}</td>
-                        <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 700 }}>
-                          +{line.receivedQuantity} {line.unitCode}
-                        </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-                          Rs. {(line.unitCostMinorUnits / 100).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
-                          Rs. {(line.totalCostMinorUnits / 100).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '6px 10px', fontSize: '11px', color: '#64748b' }}>
-                          {line.lotNumber ? <div>Lot: {line.lotNumber}</div> : null}
-                          {line.expiryDateUtc ? <div>Exp: {line.expiryDateUtc.slice(0, 10)}</div> : null}
-                          {!line.lotNumber && !line.expiryDateUtc ? '—' : null}
-                        </td>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                  <div>GRN Number: <strong>{selectedGrnDetail.grnNumber}</strong></div>
+                  <div>Received Date: <strong>{formatDateTime(selectedGrnDetail.receivedDateUtc)}</strong></div>
+                  <div>Supplier: <strong>{selectedGrnDetail.supplierName}</strong></div>
+                  <div>Stock Location: <strong style={{ color: '#0284c7' }}>{selectedGrnDetail.locationName || 'Central Warehouse (WH-MAIN)'}</strong></div>
+                  <div>Supplier Invoice / Challan: <strong>{selectedGrnDetail.supplierInvoiceRef}</strong></div>
+                  <div>Payment Status: <strong style={{ color: selectedGrnDetail.paymentStatus === 'PAID' ? '#059669' : '#b45309' }}>● {selectedGrnDetail.paymentStatus || 'UNPAID'}</strong></div>
+                  {selectedGrnDetail.poNumber && (
+                    <div>Linked PO: <strong>{selectedGrnDetail.poNumber}</strong></div>
+                  )}
+                  {selectedGrnDetail.receivedBy && (
+                    <div>Received By: <strong>{selectedGrnDetail.receivedBy}</strong></div>
+                  )}
+                  {selectedGrnDetail.notes && (
+                    <div style={{ gridColumn: 'span 2', color: '#64748b' }}>
+                      Notes: {selectedGrnDetail.notes}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#334155' }}>Received Line Items & Inventory Movements</h4>
+                  <table className="data-table" style={{ width: '100%', fontSize: '11px' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                        <th style={{ textAlign: 'left', padding: '6px 8px' }}>Item Name</th>
+                        <th style={{ textAlign: 'left', padding: '6px 8px' }}>SKU</th>
+                        <th style={{ textAlign: 'center', padding: '6px 8px' }}>Qty</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px' }}>Unit Cost</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px' }}>Total (PKR)</th>
+                        <th style={{ textAlign: 'left', padding: '6px 8px' }}>Lot # / Expiry</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(selectedGrnDetail.lines ?? []).map((line) => (
+                        <tr key={line.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '6px 8px', fontWeight: 600 }}>{line.productName}</td>
+                          <td style={{ padding: '6px 8px', color: '#64748b' }}>{line.sku}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>
+                            +{line.receivedQuantity} {line.unitCode}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                            Rs. {(line.unitCostMinorUnits / 100).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                            Rs. {(line.totalCostMinorUnits / 100).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '6px 8px', fontSize: '10px', color: '#64748b' }}>
+                            {line.lotNumber ? <div>Lot: {line.lotNumber}</div> : null}
+                            {line.expiryDateUtc ? <div>Exp: {line.expiryDateUtc.slice(0, 10)}</div> : null}
+                            {!line.lotNumber && !line.expiryDateUtc ? '—' : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  background: '#f1f5f9',
-                  borderRadius: '6px',
-                  fontWeight: 700,
-                  fontSize: '14px',
-                }}
-              >
-                <span>Total Received Value:</span>
-                <span style={{ color: '#059669' }}>
-                  Rs. {(selectedGrnDetail.totalAmountMinorUnits / 100).toFixed(2)}
-                </span>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    marginTop: '10px',
+                  }}
+                >
+                  <span>Grand Total Received Value:</span>
+                  <span style={{ color: '#059669', fontSize: '15px' }}>
+                    Rs. {(selectedGrnDetail.totalAmountMinorUnits / 100).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Printable Verification Signatures */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '24px', paddingTop: '10px', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
+                  <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '4px' }}>
+                    Received By (Storekeeper)
+                  </div>
+                  <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '4px' }}>
+                    Verified By (Warehouse Incharge)
+                  </div>
+                  <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '4px' }}>
+                    Supplier / Delivery Rep
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button
                 type="button"
                 className="btn-primary"
+                style={{ background: '#0284c7', borderColor: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                onClick={() => window.print()}
+              >
+                🖨️ Print Receiving Slip (Challan)
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
                 onClick={() => setSelectedGrnDetail(null)}
               >
                 Close
@@ -9610,7 +10906,30 @@ export const App: React.FC = () => {
                   Loading supplier statement...
                 </div>
               ) : selectedSupplierLedger ? (
-                <>
+                <div id="printable-supplier-ledger">
+                  {/* Official Printable Header */}
+                  <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '10px', marginBottom: '14px' }}>
+                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>
+                      RZ ENTERPRISES
+                    </h2>
+                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
+                      Wholesale Sanitary Ware, Fittings, Pipe Solutions & Hardware
+                    </div>
+                    <div style={{ display: 'inline-block', marginTop: '6px', padding: '3px 12px', borderRadius: '4px', background: '#0f172a', color: '#ffffff', fontSize: '12px', fontWeight: 800 }}>
+                      SUPPLIER KHATA & ACCOUNTS PAYABLE STATEMENT
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                    <div>Supplier: <strong>{selectedSupplierLedger.supplier.name}</strong> ({selectedSupplierLedger.supplier.code})</div>
+                    <div>Contact Person: <strong>{selectedSupplierLedger.supplier.contactPerson || '—'}</strong></div>
+                    <div>Phone: <strong>{selectedSupplierLedger.supplier.phone || '—'}</strong></div>
+                    <div>Terms: <strong>{selectedSupplierLedger.supplier.paymentTermsDays > 0 ? `Net ${selectedSupplierLedger.supplier.paymentTermsDays} Days` : 'Cash on Delivery'}</strong></div>
+                    {selectedSupplierLedger.supplier.address && (
+                      <div style={{ gridColumn: 'span 2' }}>Address: <strong>{selectedSupplierLedger.supplier.address}</strong></div>
+                    )}
+                  </div>
+
                   {/* Financial Balance Summary Strip */}
                   <div
                     style={{
@@ -9752,24 +11071,34 @@ export const App: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
-                </>
+                </div>
               ) : null}
             </div>
 
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 {selectedSupplierLedger && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    style={{ background: '#059669', borderColor: '#047857', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => {
-                      const sup = suppliers.find((s) => s.id === selectedSupplierLedger.supplier.id);
-                      if (sup) openRecordPayment(sup);
-                    }}
-                  >
-                    💳 Record Payment for this Supplier
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ background: '#059669', borderColor: '#047857', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => {
+                        const sup = suppliers.find((s) => s.id === selectedSupplierLedger.supplier.id);
+                        if (sup) openRecordPayment(sup);
+                      }}
+                    >
+                      💳 Record Payment
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                      onClick={() => window.print()}
+                    >
+                      🖨️ Print Statement
+                    </button>
+                  </>
                 )}
               </div>
               <button
@@ -9864,23 +11193,72 @@ export const App: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Reference / Cheque #</label>
+                    <label className="form-label">
+                      {paymentMethod === 'CHEQUE' ? 'Cheque # *' : 'Reference / Trans ID'}
+                    </label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. CHQ-9912 or Bank Ref"
+                      placeholder={paymentMethod === 'CHEQUE' ? 'e.g. CHQ-991204' : 'e.g. IBFT-883921'}
                       value={paymentReference}
                       onChange={(e) => setPaymentReference(e.target.value)}
                     />
                   </div>
                 </div>
 
+                {(paymentMethod === 'BANK_TRANSFER' || paymentMethod === 'CHEQUE') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: paymentMethod === 'CHEQUE' ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                    <div>
+                      <label className="form-label">Bank Name {paymentMethod === 'CHEQUE' ? '*' : ''}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. HBL / Meezan Bank / Bank Alfalah"
+                        value={paymentBankName}
+                        onChange={(e) => setPaymentBankName(e.target.value)}
+                      />
+                    </div>
+                    {paymentMethod === 'CHEQUE' && (
+                      <div>
+                        <label className="form-label">Cheque Clearing / Maturity Date</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={paymentChequeDate}
+                          onChange={(e) => setPaymentChequeDate(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {paymentMethod === 'CASH' && (
+                  <div
+                    style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: '#166534',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span>💵</span>
+                    <span>
+                      Cash payout will automatically decrement the active register drawer under the current open shift.
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label className="form-label">Payment Notes / Description</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Paid via HBL Online transfer against last delivery"
+                    placeholder="e.g. Paid via online transfer against goods delivery"
                     value={paymentNotes}
                     onChange={(e) => setPaymentNotes(e.target.value)}
                   />

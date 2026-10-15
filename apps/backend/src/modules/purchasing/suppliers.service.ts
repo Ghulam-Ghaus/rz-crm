@@ -4,6 +4,8 @@ import {
   SupplierEntity,
   SupplierPaymentEntity,
   GoodsReceiptEntity,
+  CashTransactionEntity,
+  ShiftEntity,
 } from '@rz-crm/database';
 import {
   Supplier,
@@ -38,6 +40,8 @@ export class SuppliersService {
       taxNumber: s.taxNumber,
       address: s.address,
       paymentTermsDays: s.paymentTermsDays,
+      creditLimitMinorUnits: s.creditLimitMinorUnits ?? 0,
+      outstandingBalanceMinorUnits: s.outstandingBalanceMinorUnits ?? 0,
       isActive: s.isActive,
       createdAtUtc: s.createdAtUtc,
       updatedAtUtc: s.updatedAtUtc,
@@ -64,6 +68,8 @@ export class SuppliersService {
       taxNumber: input.taxNumber?.trim() || null,
       address: input.address?.trim() || null,
       paymentTermsDays: input.paymentTermsDays ?? 0,
+      creditLimitMinorUnits: input.creditLimitMinorUnits ?? 0,
+      outstandingBalanceMinorUnits: 0,
       isActive: 1,
       createdAtUtc: now,
       updatedAtUtc: now,
@@ -82,6 +88,8 @@ export class SuppliersService {
       taxNumber: saved.taxNumber,
       address: saved.address,
       paymentTermsDays: saved.paymentTermsDays,
+      creditLimitMinorUnits: saved.creditLimitMinorUnits ?? 0,
+      outstandingBalanceMinorUnits: saved.outstandingBalanceMinorUnits ?? 0,
       isActive: saved.isActive,
       createdAtUtc: saved.createdAtUtc,
       updatedAtUtc: saved.updatedAtUtc,
@@ -222,6 +230,8 @@ export class SuppliersService {
         taxNumber: supplier.taxNumber,
         address: supplier.address,
         paymentTermsDays: supplier.paymentTermsDays,
+        creditLimitMinorUnits: supplier.creditLimitMinorUnits ?? 0,
+        outstandingBalanceMinorUnits: supplier.outstandingBalanceMinorUnits ?? 0,
         isActive: supplier.isActive,
         createdAtUtc: supplier.createdAtUtc,
         updatedAtUtc: supplier.updatedAtUtc,
@@ -235,57 +245,100 @@ export class SuppliersService {
 
   public async recordSupplierPayment(input: CreateSupplierPaymentInput): Promise<SupplierPayment> {
     const dataSource = this.databaseService.getDataSource();
-    const supplierRepo = dataSource.getRepository(SupplierEntity);
-    const paymentRepo = dataSource.getRepository(SupplierPaymentEntity);
 
-    const supplier = await supplierRepo.findOne({ where: { id: input.supplierId, storeId: input.storeId } });
-    if (!supplier) {
-      throw new Error(`Supplier #${input.supplierId} not found`);
-    }
+    return await dataSource.transaction(async (manager) => {
+      const supplierRepo = manager.getRepository(SupplierEntity);
+      const paymentRepo = manager.getRepository(SupplierPaymentEntity);
+      const grnRepo = manager.getRepository(GoodsReceiptEntity);
+      const cashRepo = manager.getRepository(CashTransactionEntity);
+      const shiftRepo = manager.getRepository(ShiftEntity);
 
-    if (!input.amountMinorUnits || input.amountMinorUnits <= 0) {
-      throw new Error('Payment amount must be greater than zero');
-    }
+      const supplier = await supplierRepo.findOne({ where: { id: input.supplierId, storeId: input.storeId } });
+      if (!supplier) {
+        throw new Error(`Supplier #${input.supplierId} not found`);
+      }
 
-    const now = nowUtcString();
-    const paymentDate = input.paymentDateUtc || now;
+      if (!input.amountMinorUnits || input.amountMinorUnits <= 0) {
+        throw new Error('Payment amount must be greater than zero');
+      }
 
-    // Generate sequential payment number: SPAY-YYYYMMDD-XXXX
-    const datePart = paymentDate.slice(0, 10).replace(/-/g, '');
-    const count = await paymentRepo.count({ where: { storeId: input.storeId } });
-    const paymentNumber = `SPAY-${datePart}-${String(count + 1).padStart(4, '0')}`;
+      const now = nowUtcString();
+      const paymentDate = input.paymentDateUtc || now;
 
-    const entity = paymentRepo.create({
-      storeId: input.storeId,
-      supplierId: input.supplierId,
-      paymentNumber,
-      paymentDateUtc: paymentDate,
-      amountMinorUnits: input.amountMinorUnits,
-      currencyCode: 'PKR',
-      paymentMethod: input.paymentMethod || 'CASH',
-      reference: input.reference?.trim() || null,
-      notes: input.notes?.trim() || null,
-      paidBy: input.paidBy?.trim() || null,
-      createdAtUtc: now,
-      updatedAtUtc: now,
+      // Generate sequential payment number: SPAY-YYYYMMDD-XXXX
+      const datePart = paymentDate.slice(0, 10).replace(/-/g, '');
+      const count = await paymentRepo.count({ where: { storeId: input.storeId } });
+      const paymentNumber = `SPAY-${datePart}-${String(count + 1).padStart(4, '0')}`;
+
+      const entity = paymentRepo.create({
+        storeId: input.storeId,
+        supplierId: input.supplierId,
+        paymentNumber,
+        paymentDateUtc: paymentDate,
+        amountMinorUnits: input.amountMinorUnits,
+        currencyCode: 'PKR',
+        paymentMethod: input.paymentMethod || 'CASH',
+        reference: input.reference?.trim() || null,
+        bankName: input.bankName?.trim() || null,
+        chequeDate: input.chequeDate?.trim() || null,
+        notes: input.notes?.trim() || null,
+        paidBy: input.paidBy?.trim() || null,
+        createdAtUtc: now,
+        updatedAtUtc: now,
+      });
+
+      const saved = await paymentRepo.save(entity);
+
+      // Decrement supplier outstanding balance
+      supplier.outstandingBalanceMinorUnits = Math.max(0, (supplier.outstandingBalanceMinorUnits ?? 0) - input.amountMinorUnits);
+      supplier.updatedAtUtc = now;
+      await supplierRepo.save(supplier);
+
+      // If a specific GRN is referenced, update its payment status
+      if (input.grnId) {
+        const grn = await grnRepo.findOne({ where: { id: input.grnId } });
+        if (grn) {
+          grn.paymentStatus = 'PAID';
+          grn.updatedAtUtc = now;
+          await grnRepo.save(grn);
+        }
+      }
+
+      // If paid via cash, record cash drawer transaction under current shift if open
+      if ((input.paymentMethod || 'CASH') === 'CASH') {
+        const activeShift = await shiftRepo.findOne({ where: { storeId: input.storeId, status: 'open' } });
+        if (activeShift) {
+          const cashTx = cashRepo.create({
+            shiftId: activeShift.id,
+            transactionType: 'payout',
+            amountMinorUnits: input.amountMinorUnits,
+            sourceId: paymentNumber,
+            notes: `Supplier Payment: ${supplier.name} (${paymentNumber})`,
+            createdAtUtc: now,
+          });
+          await cashRepo.save(cashTx);
+          activeShift.expectedCashMinorUnits = Math.max(0, activeShift.expectedCashMinorUnits - input.amountMinorUnits);
+          await shiftRepo.save(activeShift);
+        }
+      }
+
+      return {
+        id: saved.id,
+        storeId: saved.storeId,
+        supplierId: saved.supplierId,
+        paymentNumber: saved.paymentNumber,
+        paymentDateUtc: saved.paymentDateUtc,
+        amountMinorUnits: saved.amountMinorUnits,
+        currencyCode: saved.currencyCode,
+        paymentMethod: saved.paymentMethod,
+        reference: saved.reference,
+        bankName: saved.bankName,
+        chequeDate: saved.chequeDate,
+        notes: saved.notes,
+        paidBy: saved.paidBy,
+        createdAtUtc: saved.createdAtUtc,
+        updatedAtUtc: saved.updatedAtUtc,
+      };
     });
-
-    const saved = await paymentRepo.save(entity);
-
-    return {
-      id: saved.id,
-      storeId: saved.storeId,
-      supplierId: saved.supplierId,
-      paymentNumber: saved.paymentNumber,
-      paymentDateUtc: saved.paymentDateUtc,
-      amountMinorUnits: saved.amountMinorUnits,
-      currencyCode: saved.currencyCode,
-      paymentMethod: saved.paymentMethod,
-      reference: saved.reference,
-      notes: saved.notes,
-      paidBy: saved.paidBy,
-      createdAtUtc: saved.createdAtUtc,
-      updatedAtUtc: saved.updatedAtUtc,
-    };
   }
 }

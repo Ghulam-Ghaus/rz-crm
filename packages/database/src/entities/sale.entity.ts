@@ -38,6 +38,42 @@ export class SaleEntity {
   @Column({ name: 'currency_code', type: 'varchar', length: 3, default: 'PKR' })
   currencyCode!: string;
 
+  @Column({ name: 'customer_id', type: 'integer', nullable: true })
+  customerId!: number | null;
+
+  @Column({ name: 'customer_name', type: 'varchar', length: 150, nullable: true })
+  customerName!: string | null;
+
+  @Column({ name: 'order_type', type: 'varchar', length: 20, default: 'retail' })
+  orderType!: 'retail' | 'wholesale';
+
+  @Column({ name: 'price_tier', type: 'varchar', length: 20, default: 'retail' })
+  priceTier!: 'retail' | 'wholesale';
+
+  @Column({ name: 'location_id', type: 'integer', nullable: true })
+  locationId!: number | null;
+
+  @Column({ name: 'payment_status', type: 'varchar', length: 20, default: 'paid' })
+  paymentStatus!: 'paid' | 'partial' | 'unpaid';
+
+  @Column({ name: 'payment_method', type: 'varchar', length: 30, default: 'cash' })
+  paymentMethod!: string;
+
+  @Column({ name: 'amount_paid_minor_units', type: 'integer', default: 0 })
+  amountPaidMinorUnits!: number;
+
+  @Column({ name: 'balance_due_minor_units', type: 'integer', default: 0 })
+  balanceDueMinorUnits!: number;
+
+  @Column({ name: 'due_date', type: 'varchar', length: 10, nullable: true })
+  dueDate!: string | null;
+
+  @Column({ name: 'payment_terms', type: 'varchar', length: 50, nullable: true })
+  paymentTerms!: string | null;
+
+  @Column({ name: 'reference_note', type: 'varchar', length: 255, nullable: true })
+  referenceNote!: string | null;
+
   @Column({ name: 'idempotency_key', type: 'varchar', length: 100, nullable: true })
   idempotencyKey!: string | null;
 
