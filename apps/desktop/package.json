@@ -1,0 +1,38 @@
+{
+  "name": "@bakery/desktop",
+  "version": "0.1.0",
+  "description": "Bakery Store Desktop Application",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main/main.js",
+  "scripts": {
+    "build:main": "esbuild src/main/main.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist/main/main.js --sourcemap",
+    "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --target=node22 --format=cjs --external:electron --outfile=dist/preload/preload.cjs --sourcemap",
+    "copy:renderer": "node -e \"const fs = require('fs'); if (fs.existsSync('../renderer/dist')) fs.cpSync('../renderer/dist', 'dist/renderer', { recursive: true });\"",
+    "build": "pnpm build:main && pnpm build:preload && pnpm copy:renderer",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "predev": "node ../../scripts/switch-better-sqlite3.cjs electron",
+    "dev": "pnpm build && electron .",
+    "prepackage": "node ../../scripts/switch-better-sqlite3.cjs electron",
+    "package": "pnpm build && electron-builder --dir",
+    "predist": "node ../../scripts/switch-better-sqlite3.cjs electron",
+    "dist": "pnpm build && electron-builder --win"
+  },
+  "dependencies": {
+    "@bakery/backend": "workspace:*",
+    "@bakery/config": "workspace:*",
+    "@bakery/contracts": "workspace:*",
+    "@bakery/database": "workspace:*",
+    "@bakery/shared": "workspace:*",
+    "better-sqlite3": "^11.8.1",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}

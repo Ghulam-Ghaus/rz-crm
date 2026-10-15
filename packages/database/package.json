@@ -1,0 +1,26 @@
+{
+  "name": "@bakery/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bakery/config": "workspace:*",
+    "@bakery/contracts": "workspace:*",
+    "@bakery/shared": "workspace:*",
+    "better-sqlite3": "^11.8.1",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.20"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}
