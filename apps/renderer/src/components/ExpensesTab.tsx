@@ -393,7 +393,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `bakery-expenses-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `rz-expenses-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -1848,7 +1848,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
               }}
             >
               <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '10px', marginBottom: '12px' }}>
-                <div style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a' }}>BAKERY STORE</div>
+                <div style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a' }}>RZ ENTERPRISES</div>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>STAFF SALARY VOUCHER</div>
                 <div style={{ fontWeight: 700, marginTop: '4px' }}>Month: {paySlipRow.paidRecord.payrollMonth}</div>
               </div>

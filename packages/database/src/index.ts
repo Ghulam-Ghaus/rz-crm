@@ -3,3 +3,4 @@ export * from './migrations/index.js';
 export * from './data-source.js';
 export * from './database-manager.js';
 export * from './identity-guard.js';
+export * from './restore-drill.js';

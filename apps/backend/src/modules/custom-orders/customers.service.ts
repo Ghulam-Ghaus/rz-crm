@@ -26,7 +26,7 @@ export class CustomersService {
       .createQueryBuilder('c')
       .where('c.store_id = :storeId', { storeId })
       .andWhere(
-        '(LOWER(c.name) LIKE :q OR LOWER(c.phone) LIKE :q OR LOWER(c.code) LIKE :q OR LOWER(COALESCE(c.company_name, "")) LIKE :q OR LOWER(COALESCE(c.tax_number, "")) LIKE :q)',
+        "(LOWER(c.name) LIKE :q OR LOWER(c.phone) LIKE :q OR LOWER(c.code) LIKE :q OR LOWER(COALESCE(c.company_name, '')) LIKE :q OR LOWER(COALESCE(c.tax_number, '')) LIKE :q)",
         { q: `%${trimmed}%` }
       )
       .orderBy('c.created_at_utc', 'DESC')

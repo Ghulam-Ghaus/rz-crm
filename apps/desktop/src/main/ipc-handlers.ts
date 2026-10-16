@@ -37,6 +37,8 @@ import {
   CreateHeldCartInputSchema,
   CreateBackupInputSchema,
   RestoreBackupInputSchema,
+  BackupScheduleConfigSchema,
+  ExportArchiveBundleInputSchema,
   ExportReportInputSchema,
   GetProfitLossQuerySchema,
   LoginInputSchema,
@@ -59,7 +61,24 @@ import {
   GetEmployeeStatementQuerySchema,
   PostSalesReturnInputSchema,
   PostPurchaseReturnInputSchema,
+  CreateStakeholderInputSchema,
+  UpdateStakeholderInputSchema,
+  UpdateStakeholderEquityInputSchema,
+  CreateStakeholderTxInputSchema,
+  CreateFiscalPeriodInputSchema,
+  CloseFiscalPeriodInputSchema,
+  CalculateDistributionInputSchema,
+  CreateDistributionRunInputSchema,
+  ApproveDistributionRunInputSchema,
+  PayoutDistributionRunInputSchema,
+  ListAuditLogsQuerySchema,
   UserSession,
+  CreateBankAccountInputSchema,
+  UpdateBankAccountInputSchema,
+  ListBankTransactionsQuerySchema,
+  CashToBankDepositInputSchema,
+  ClearChequeInputSchema,
+  SaveAttachmentInputSchema,
 } from '@rz-crm/contracts';
 
 import {
@@ -86,6 +105,10 @@ import {
   PayrollService,
   SalesReturnsService,
   PurchaseReturnsService,
+  StakeholdersService,
+  FinancialReportsService,
+  AuditService,
+  BankAccountsService,
   INestApplicationContext,
 } from '@rz-crm/backend';
 import { generateUuid } from '@rz-crm/shared';
@@ -97,6 +120,10 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
   const payrollService = appContext.get(PayrollService);
   const salesReturnsService = appContext.get(SalesReturnsService);
   const purchaseReturnsService = appContext.get(PurchaseReturnsService);
+  const stakeholdersService = appContext.get(StakeholdersService);
+  const financialReportsService = appContext.get(FinancialReportsService);
+  const auditService = appContext.get(AuditService);
+  const bankAccountsService = appContext.get(BankAccountsService);
   let activeSession: UserSession | null = null;
 
   const storeSettingsService = appContext.get(StoreSettingsService);
@@ -799,6 +826,23 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
       }
 
       const shift = await shiftsService.closeShift(parsed.data);
+
+      // Automated backup on shift close (Phase 10)
+      try {
+        const schedule = await backupService.getScheduleConfig();
+        if (schedule.enabled && schedule.autoBackupOnShiftClose) {
+          await backupService.createBackup({
+            notes: `Auto-backup on shift close (Shift #${shift.id})`,
+          });
+          await backupService.setScheduleConfig({
+            ...schedule,
+            lastAutoBackupUtc: new Date().toISOString(),
+          });
+        }
+      } catch (backupErr) {
+        console.warn('[Backup] Auto-backup on shift close skipped or failed:', backupErr);
+      }
+
       return Result.ok(shift);
     } catch (err: unknown) {
       return Result.err({
@@ -1935,6 +1979,84 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
     }
   });
 
+  // 55a. Backup: Run Restore Drill Simulation (Phase 10)
+  ipcMain.handle(IPC_CHANNELS.BACKUP_RESTORE_DRILL, async (_event, filename: string) => {
+    const correlationId = generateUuid();
+    try {
+      const result = await backupService.runRestoreDrill(filename);
+      return Result.ok(result);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to execute restore drill simulation',
+        correlationId,
+      });
+    }
+  });
+
+  // 55b. Backup: Get Automated Schedule Config (Phase 10)
+  ipcMain.handle(IPC_CHANNELS.BACKUP_SCHEDULE_GET, async () => {
+    const correlationId = generateUuid();
+    try {
+      const config = await backupService.getScheduleConfig();
+      return Result.ok(config);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to get backup schedule config',
+        correlationId,
+      });
+    }
+  });
+
+  // 55c. Backup: Set Automated Schedule Config (Phase 10)
+  ipcMain.handle(IPC_CHANNELS.BACKUP_SCHEDULE_SET, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = BackupScheduleConfigSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid backup schedule configuration',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const updated = await backupService.setScheduleConfig(parsed.data);
+      return Result.ok(updated);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to update backup schedule config',
+        correlationId,
+      });
+    }
+  });
+
+  // 55d. Backup: Export Disaster Recovery Archive Bundle (Phase 10)
+  ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT_ARCHIVE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ExportArchiveBundleInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid export archive bundle request',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const result = await backupService.exportArchiveBundle(parsed.data);
+      return Result.ok(result);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to export disaster recovery archive bundle',
+        correlationId,
+      });
+    }
+  });
+
   // 56. Reports: Profit & Loss Analytics
   ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT_LOSS, async (_event, rawInput: unknown) => {
     const correlationId = generateUuid();
@@ -1955,6 +2077,415 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
       return Result.err({
         code: ErrorCode.DATABASE_ERROR,
         message: err instanceof Error ? err.message : 'Failed to calculate profit and loss report',
+        correlationId,
+      });
+    }
+  });
+
+  // Customer Receivables Ageing
+  ipcMain.handle(IPC_CHANNELS.REPORTS_RECEIVABLES_AGEING, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const report = await financialReportsService.getCustomerReceivablesAgeing(targetStoreId);
+      return Result.ok(report);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to generate receivables ageing report',
+        correlationId,
+      });
+    }
+  });
+
+  // Supplier Payables Ageing
+  ipcMain.handle(IPC_CHANNELS.REPORTS_PAYABLES_AGEING, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const report = await financialReportsService.getSupplierPayablesAgeing(targetStoreId);
+      return Result.ok(report);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to generate payables ageing report',
+        correlationId,
+      });
+    }
+  });
+
+  // Cheque Register & Clearing Forecast
+  ipcMain.handle(IPC_CHANNELS.REPORTS_CHEQUE_REGISTER, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const report = await financialReportsService.getChequeRegister(targetStoreId);
+      return Result.ok(report);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to generate cheque register',
+        correlationId,
+      });
+    }
+  });
+
+  // Stock Valuation Report
+  ipcMain.handle(IPC_CHANNELS.REPORTS_STOCK_VALUATION, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const report = await financialReportsService.getStockValuation(targetStoreId);
+      return Result.ok(report);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to generate stock valuation report',
+        correlationId,
+      });
+    }
+  });
+
+  // Stakeholder Capital Statement
+  ipcMain.handle(
+    IPC_CHANNELS.REPORTS_STAKEHOLDER_STATEMENT,
+    async (_event, { storeId, stakeholderId }: { storeId: number; stakeholderId: number }) => {
+      const correlationId = generateUuid();
+      try {
+        const activeStore = await storeSettingsService.getActiveStore();
+        const targetStoreId = storeId || activeStore?.id || 1;
+        const report = await financialReportsService.getStakeholderStatement(targetStoreId, stakeholderId);
+        return Result.ok(report);
+      } catch (err: unknown) {
+        return Result.err({
+          code: ErrorCode.DATABASE_ERROR,
+          message: err instanceof Error ? err.message : 'Failed to generate stakeholder statement',
+          correlationId,
+        });
+      }
+    },
+  );
+
+  // ==========================================
+  // SECURITY & AUDIT ACTIVITY MONITOR
+  // ==========================================
+
+  // List Audit Logs
+  ipcMain.handle(IPC_CHANNELS.AUDIT_LOGS_LIST, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ListAuditLogsQuerySchema.safeParse(rawInput || {});
+      const query = parsed.success ? parsed.data : undefined;
+      const res = await auditService.listLogs(query);
+      return Result.ok(res);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list audit logs',
+        correlationId,
+      });
+    }
+  });
+
+  // Audit Summary Stats
+  ipcMain.handle(IPC_CHANNELS.AUDIT_LOGS_SUMMARY, async () => {
+    const correlationId = generateUuid();
+    try {
+      const summary = await auditService.getSummaryStats();
+      return Result.ok(summary);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to fetch audit summary',
+        correlationId,
+      });
+    }
+  });
+
+  // Export Audit Logs
+  ipcMain.handle(IPC_CHANNELS.AUDIT_LOGS_EXPORT, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ListAuditLogsQuerySchema.safeParse(rawInput || {});
+      const query = parsed.success ? parsed.data : undefined;
+      const logs = await auditService.exportLogs(query);
+
+      const win = BrowserWindow.getFocusedWindow();
+      const saveRes = await dialog.showSaveDialog(win!, {
+        title: 'Export Security Audit Logs',
+        defaultPath: `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`,
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+      });
+
+      if (saveRes.canceled || !saveRes.filePath) {
+        return Result.ok({ success: false, filePath: '' });
+      }
+
+      const headers = ['ID', 'Timestamp (UTC)', 'Username', 'Action', 'Resource', 'Severity', 'Details'];
+      const rows = logs.map(l => [
+        l.id,
+        l.createdAtUtc,
+        l.username || 'system',
+        l.action,
+        l.resource || '',
+        l.severity,
+        l.detailsJson || '',
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')),
+      ].join('\r\n');
+
+      await fs.writeFile(saveRes.filePath, csvContent, 'utf-8');
+      return Result.ok({ success: true, filePath: saveRes.filePath });
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to export audit logs',
+        correlationId,
+      });
+    }
+  });
+
+  // ==========================================
+  // COMPANY BANK ACCOUNTS & CHEQUE CLEARING (Phase 9)
+  // ==========================================
+
+  // List Accounts
+  ipcMain.handle(IPC_CHANNELS.BANK_ACCOUNTS_LIST, async (_event, storeId?: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const accounts = await bankAccountsService.listAccounts(targetStoreId);
+      return Result.ok(accounts);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list bank accounts',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Bank Account
+  ipcMain.handle(IPC_CHANNELS.BANK_ACCOUNTS_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CreateBankAccountInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid bank account data',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const account = await bankAccountsService.createAccount(parsed.data);
+      return Result.ok(account);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to create bank account',
+        correlationId,
+      });
+    }
+  });
+
+  // Update Bank Account
+  ipcMain.handle(IPC_CHANNELS.BANK_ACCOUNTS_UPDATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = UpdateBankAccountInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid update bank account data',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const account = await bankAccountsService.updateAccount(parsed.data);
+      return Result.ok(account);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to update bank account',
+        correlationId,
+      });
+    }
+  });
+
+  // List Bank Transactions
+  ipcMain.handle(IPC_CHANNELS.BANK_TRANSACTIONS_LIST, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ListBankTransactionsQuerySchema.safeParse(rawInput || {});
+      const activeStore = await storeSettingsService.getActiveStore();
+      const query = parsed.success ? parsed.data : { storeId: activeStore?.id || 1, limit: 100 };
+      const txs = await bankAccountsService.listTransactions(query);
+      return Result.ok(txs);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list bank transactions',
+        correlationId,
+      });
+    }
+  });
+
+  // Deposit Cash to Bank
+  ipcMain.handle(IPC_CHANNELS.BANK_CASH_DEPOSIT, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CashToBankDepositInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid cash deposit data',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const tx = await bankAccountsService.depositCash(parsed.data);
+      return Result.ok(tx);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to deposit cash to bank',
+        correlationId,
+      });
+    }
+  });
+
+  // Clear Cheque
+  ipcMain.handle(IPC_CHANNELS.BANK_CHEQUE_CLEAR, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ClearChequeInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid cheque clearing data',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const tx = await bankAccountsService.clearCheque(parsed.data);
+      return Result.ok(tx);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to clear cheque',
+        correlationId,
+      });
+    }
+  });
+
+  // Bank Summary Stats
+  ipcMain.handle(IPC_CHANNELS.BANK_SUMMARY_STATS, async (_event, storeId?: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const stats = await bankAccountsService.getSummaryStats(targetStoreId);
+      return Result.ok(stats);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to fetch bank summary stats',
+        correlationId,
+      });
+    }
+  });
+
+  // ==========================================
+  // ATTACHMENTS (Optimized WebP File Storage)
+  // ==========================================
+
+  // Save Attachment (WebP Image to <userData>/attachments/...)
+  ipcMain.handle(IPC_CHANNELS.ATTACHMENTS_SAVE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = SaveAttachmentInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid attachment data',
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+
+      const { folder, filenamePrefix, base64Data } = parsed.data;
+      const baseDir = path.join(app.getPath('userData'), 'attachments', folder);
+      await fs.mkdir(baseDir, { recursive: true });
+
+      // Strip data uri prefix if present (e.g. data:image/webp;base64,)
+      const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+      const buffer = Buffer.from(cleanBase64, 'base64');
+
+      const safePrefix = filenamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `${safePrefix}_${Date.now()}.webp`;
+      const fullPath = path.join(baseDir, filename);
+
+      await fs.writeFile(fullPath, buffer);
+
+      const relativePath = `attachments/${folder}/${filename}`.replace(/\\/g, '/');
+      return Result.ok({
+        relativePath,
+        fileSizeBytes: buffer.length,
+        format: 'webp',
+      });
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to save attachment image',
+        correlationId,
+      });
+    }
+  });
+
+  // Read Attachment (Safe Base64 from <userData>/attachments/...)
+  ipcMain.handle(IPC_CHANNELS.ATTACHMENTS_READ, async (_event, relativePath: string) => {
+    const correlationId = generateUuid();
+    try {
+      if (!relativePath || typeof relativePath !== 'string') {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Invalid attachment path',
+          correlationId,
+        });
+      }
+
+      // Security check: prevent directory traversal
+      const normalized = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
+      const userDataDir = app.getPath('userData');
+      const fullPath = path.join(userDataDir, normalized);
+
+      // Verify that the path starts with userDataDir
+      if (!fullPath.startsWith(userDataDir)) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'Unauthorized file path traversal attempt',
+          correlationId,
+        });
+      }
+
+      const buffer = await fs.readFile(fullPath);
+      return Result.ok({
+        base64Data: buffer.toString('base64'),
+        mimeType: 'image/webp',
+      });
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to read attachment file',
         correlationId,
       });
     }
@@ -2415,6 +2946,349 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
     }
   });
 
+  // ==========================================
+  // STAKEHOLDERS, EQUITY & PROFIT DISTRIBUTIONS
+  // ==========================================
+
+  // List Stakeholders
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_LIST, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const list = await stakeholdersService.listStakeholders(targetStoreId);
+      return Result.ok(list);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list stakeholders',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Stakeholder
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CreateStakeholderInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const user = activeSession?.username || 'System Admin';
+      const created = await stakeholdersService.createStakeholder(parsed.data, storeId, user);
+      return Result.ok(created);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to create stakeholder',
+        correlationId,
+      });
+    }
+  });
+
+  // Update Stakeholder
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_UPDATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = UpdateStakeholderInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const updated = await stakeholdersService.updateStakeholder(parsed.data);
+      return Result.ok(updated);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to update stakeholder',
+        correlationId,
+      });
+    }
+  });
+
+  // Update Stakeholder Equity Ratio
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_EQUITY_UPDATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = UpdateStakeholderEquityInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      await stakeholdersService.updateStakeholderEquity(parsed.data);
+      return Result.ok(undefined);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to update stakeholder equity',
+        correlationId,
+      });
+    }
+  });
+
+  // List Transactions
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_TX_LIST, async (_event, { storeId, stakeholderId }: { storeId: number; stakeholderId?: number }) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const txs = await stakeholdersService.listTransactions(targetStoreId, stakeholderId);
+      return Result.ok(txs);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list stakeholder transactions',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Transaction
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_TX_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CreateStakeholderTxInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const user = activeSession?.username || 'System Admin';
+      const created = await stakeholdersService.createTransaction(parsed.data, storeId, user);
+      return Result.ok(created);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to record stakeholder transaction',
+        correlationId,
+      });
+    }
+  });
+
+  // List Fiscal Periods
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_PERIODS_LIST, async (_event, storeId: number) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const periods = await stakeholdersService.listFiscalPeriods(targetStoreId);
+      return Result.ok(periods);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list fiscal periods',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Fiscal Period
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_PERIODS_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CreateFiscalPeriodInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const period = await stakeholdersService.createFiscalPeriod(parsed.data, storeId);
+      return Result.ok(period);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to create fiscal period',
+        correlationId,
+      });
+    }
+  });
+
+  // Close Fiscal Period
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_PERIODS_CLOSE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CloseFiscalPeriodInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const user = activeSession?.username || 'System Admin';
+      const period = await stakeholdersService.closeFiscalPeriod(parsed.data, user);
+      return Result.ok(period);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to close fiscal period',
+        correlationId,
+      });
+    }
+  });
+
+  // Calculate Distribution Preview
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_CALCULATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CalculateDistributionInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const calculation = await stakeholdersService.calculateDistribution(parsed.data);
+      return Result.ok(calculation);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to calculate profit distribution',
+        correlationId,
+      });
+    }
+  });
+
+  // Create Distribution Run
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_CREATE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = CreateDistributionRunInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const activeStore = await storeSettingsService.getActiveStore();
+      const storeId = activeStore?.id ?? 1;
+      const user = activeSession?.username || 'System Admin';
+      const run = await stakeholdersService.createDistributionRun(parsed.data, storeId, user);
+      return Result.ok(run);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to create distribution run',
+        correlationId,
+      });
+    }
+  });
+
+  // List Distribution Runs
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_LIST, async (_event, { storeId, periodId }: { storeId: number; periodId?: number }) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const runs = await stakeholdersService.listDistributionRuns(targetStoreId, periodId);
+      return Result.ok(runs);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to list distribution runs',
+        correlationId,
+      });
+    }
+  });
+
+  // Approve Distribution Run
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_APPROVE, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = ApproveDistributionRunInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const user = activeSession?.username || 'Director';
+      const run = await stakeholdersService.approveDistributionRun(parsed.data, user);
+      return Result.ok(run);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to approve distribution run',
+        correlationId,
+      });
+    }
+  });
+
+  // Payout Distribution Run
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_PAYOUT, async (_event, rawInput: unknown) => {
+    const correlationId = generateUuid();
+    try {
+      const parsed = PayoutDistributionRunInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return Result.err({
+          code: ErrorCode.VALIDATION_FAILED,
+          message: parsed.error.issues.map((i) => i.message).join(', '),
+          correlationId,
+          details: { errors: parsed.error.issues },
+        });
+      }
+      const user = activeSession?.username || 'Finance Manager';
+      const run = await stakeholdersService.payoutDistributionRun(parsed.data, user);
+      return Result.ok(run);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to disburse profit distribution',
+        correlationId,
+      });
+    }
+  });
+
+  // Company P&L Summary
+  ipcMain.handle(IPC_CHANNELS.STAKEHOLDERS_PNL_SUMMARY, async (_event, { storeId, startDate, endDate }: { storeId: number; startDate?: string; endDate?: string }) => {
+    const correlationId = generateUuid();
+    try {
+      const activeStore = await storeSettingsService.getActiveStore();
+      const targetStoreId = storeId || activeStore?.id || 1;
+      const summary = await stakeholdersService.getCompanyPnlSummary(targetStoreId, startDate, endDate);
+      return Result.ok(summary);
+    } catch (err: unknown) {
+      return Result.err({
+        code: ErrorCode.DATABASE_ERROR,
+        message: err instanceof Error ? err.message : 'Failed to generate company P&L summary',
+        correlationId,
+      });
+    }
+  });
+
   // 57. Diagnostics: Export Complete Support Diagnostics Bundle
   ipcMain.handle(IPC_CHANNELS.DIAGNOSTICS_EXPORT_BUNDLE, async () => {
 
@@ -2470,6 +3344,29 @@ export function registerIpcHandlers(appContext: INestApplicationContext, databas
       });
     }
   });
+
+  // Automated background backup timer (Phase 10: runs periodic check every 5 minutes)
+  setInterval(async () => {
+    try {
+      const schedule = await backupService.getScheduleConfig();
+      if (!schedule.enabled || !schedule.nextScheduledBackupUtc) return;
+
+      const now = new Date();
+      const scheduledTime = new Date(schedule.nextScheduledBackupUtc);
+      if (now >= scheduledTime) {
+        console.log('[BackupScheduler] Automated backup is due. Running backup snapshot...');
+        await backupService.createBackup({
+          notes: `Automated scheduled backup (${schedule.frequencyHours}h frequency)`,
+        });
+        await backupService.setScheduleConfig({
+          ...schedule,
+          lastAutoBackupUtc: now.toISOString(),
+        });
+      }
+    } catch (schedulerErr) {
+      console.warn('[BackupScheduler] Automated backup check failed:', schedulerErr);
+    }
+  }, 5 * 60 * 1000);
 }
 
 

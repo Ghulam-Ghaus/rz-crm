@@ -14,6 +14,10 @@ import { BackupModule } from './modules/backup/backup.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { ExpensesModule } from './modules/expenses/expenses.module.js';
 import { ReturnsModule } from './modules/returns/returns.module.js';
+import { StakeholdersModule } from './modules/stakeholders/stakeholders.module.js';
+import { FinancialReportsModule } from './modules/reports/financial-reports.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
+import { BankAccountsModule } from './modules/bank/bank-accounts.module.js';
 
 @Module({
   imports: [
@@ -32,6 +36,10 @@ import { ReturnsModule } from './modules/returns/returns.module.js';
     UsersModule,
     ExpensesModule,
     ReturnsModule,
+    StakeholdersModule,
+    FinancialReportsModule,
+    AuditModule,
+    BankAccountsModule,
   ],
 })
 

@@ -1,5 +1,6 @@
 appId: com.rzenterprises.crm
 productName: RZ Enterprises CRM
+npmRebuild: false
 directories:
   output: release-dist
   buildResources: build

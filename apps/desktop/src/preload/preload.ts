@@ -60,6 +60,10 @@ import {
   BackupStatus,
   ExportReportInput,
   ExportReportResult,
+  RestoreDrillResult,
+  BackupScheduleConfig,
+  ExportArchiveBundleInput,
+  ExportArchiveBundleResult,
   GetProfitLossQuery,
   ProfitLossReport,
   User,
@@ -96,6 +100,40 @@ import {
   PostSalesReturnInput,
   PurchaseReturn,
   PostPurchaseReturnInput,
+  Stakeholder,
+  CreateStakeholderInput,
+  UpdateStakeholderInput,
+  UpdateStakeholderEquityInput,
+  StakeholderTransaction,
+  CreateStakeholderTxInput,
+  FiscalPeriod,
+  CreateFiscalPeriodInput,
+  CloseFiscalPeriodInput,
+  ProfitDistributionRun,
+  CalculateDistributionInput,
+  CreateDistributionRunInput,
+  ApproveDistributionRunInput,
+  PayoutDistributionRunInput,
+  CompanyPnlSummary,
+  ReceivablesAgeingReport,
+  PayablesAgeingReport,
+  ChequeRegisterReport,
+  StockValuationReport,
+  StakeholderStatementReport,
+  ListAuditLogsQuery,
+  ListAuditLogsResponse,
+  AuditSummaryStats,
+  CompanyBankAccount,
+  CreateBankAccountInput,
+  UpdateBankAccountInput,
+  BankTransaction,
+  ListBankTransactionsQuery,
+  CashToBankDepositInput,
+  ClearChequeInput,
+  BankSummaryStats,
+  SaveAttachmentInput,
+  SaveAttachmentResult,
+  ReadAttachmentResult,
 } from '@rz-crm/contracts';
 
 
@@ -368,6 +406,18 @@ const api: BakeryDesktopApi = {
     async openBackupFolder(): Promise<Result<void>> {
       return ipcRenderer.invoke(IPC_CHANNELS.BACKUP_OPEN_FOLDER);
     },
+    async runRestoreDrill(filename: string): Promise<Result<RestoreDrillResult>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BACKUP_RESTORE_DRILL, filename);
+    },
+    async getScheduleConfig(): Promise<Result<BackupScheduleConfig>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BACKUP_SCHEDULE_GET);
+    },
+    async setScheduleConfig(config: BackupScheduleConfig): Promise<Result<BackupScheduleConfig>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BACKUP_SCHEDULE_SET, config);
+    },
+    async exportArchiveBundle(input: ExportArchiveBundleInput): Promise<Result<ExportArchiveBundleResult>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BACKUP_EXPORT_ARCHIVE, input);
+    },
   },
   expenses: {
     async listCategories(): Promise<Result<ExpenseCategory[]>> {
@@ -438,16 +488,119 @@ const api: BakeryDesktopApi = {
       return ipcRenderer.invoke(IPC_CHANNELS.RETURNS_PURCHASE_GET, id);
     },
   },
+  stakeholders: {
+    async list(storeId: number): Promise<Result<Stakeholder[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_LIST, storeId);
+    },
+    async create(input: CreateStakeholderInput): Promise<Result<Stakeholder>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_CREATE, input);
+    },
+    async update(input: UpdateStakeholderInput): Promise<Result<Stakeholder>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_UPDATE, input);
+    },
+    async updateEquity(input: UpdateStakeholderEquityInput): Promise<Result<void>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_EQUITY_UPDATE, input);
+    },
+    async listTransactions(storeId: number, stakeholderId?: number): Promise<Result<StakeholderTransaction[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_TX_LIST, { storeId, stakeholderId });
+    },
+    async createTransaction(input: CreateStakeholderTxInput): Promise<Result<StakeholderTransaction>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_TX_CREATE, input);
+    },
+    async listPeriods(storeId: number): Promise<Result<FiscalPeriod[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_PERIODS_LIST, storeId);
+    },
+    async createPeriod(input: CreateFiscalPeriodInput): Promise<Result<FiscalPeriod>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_PERIODS_CREATE, input);
+    },
+    async closePeriod(input: CloseFiscalPeriodInput): Promise<Result<FiscalPeriod>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_PERIODS_CLOSE, input);
+    },
+    async calculateDistribution(input: CalculateDistributionInput): Promise<Result<ProfitDistributionRun>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_CALCULATE, input);
+    },
+    async createDistributionRun(input: CreateDistributionRunInput): Promise<Result<ProfitDistributionRun>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_CREATE, input);
+    },
+    async listDistributionRuns(storeId: number, periodId?: number): Promise<Result<ProfitDistributionRun[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_LIST, { storeId, periodId });
+    },
+    async approveDistributionRun(input: ApproveDistributionRunInput): Promise<Result<ProfitDistributionRun>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_APPROVE, input);
+    },
+    async payoutDistributionRun(input: PayoutDistributionRunInput): Promise<Result<ProfitDistributionRun>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_DISTRIBUTIONS_PAYOUT, input);
+    },
+    async getPnlSummary(storeId: number, startDate?: string, endDate?: string): Promise<Result<CompanyPnlSummary>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.STAKEHOLDERS_PNL_SUMMARY, { storeId, startDate, endDate });
+    },
+  },
   reports: {
-
     async getProfitLoss(query: GetProfitLossQuery): Promise<Result<ProfitLossReport>> {
       return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_PROFIT_LOSS, query);
+    },
+    async getReceivablesAgeing(storeId: number): Promise<Result<ReceivablesAgeingReport>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_RECEIVABLES_AGEING, storeId);
+    },
+    async getPayablesAgeing(storeId: number): Promise<Result<PayablesAgeingReport>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_PAYABLES_AGEING, storeId);
+    },
+    async getChequeRegister(storeId: number): Promise<Result<ChequeRegisterReport>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_CHEQUE_REGISTER, storeId);
+    },
+    async getStockValuation(storeId: number): Promise<Result<StockValuationReport>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_STOCK_VALUATION, storeId);
+    },
+    async getStakeholderStatement(storeId: number, stakeholderId: number): Promise<Result<StakeholderStatementReport>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_STAKEHOLDER_STATEMENT, { storeId, stakeholderId });
     },
     async exportFile(input: ExportReportInput): Promise<Result<ExportReportResult>> {
       return ipcRenderer.invoke(IPC_CHANNELS.REPORTS_EXPORT_FILE, input);
     },
     async exportDiagnosticsBundle(): Promise<Result<ExportReportResult>> {
       return ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICS_EXPORT_BUNDLE);
+    },
+  },
+  audit: {
+    async list(query?: ListAuditLogsQuery): Promise<Result<ListAuditLogsResponse>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.AUDIT_LOGS_LIST, query);
+    },
+    async getSummary(): Promise<Result<AuditSummaryStats>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.AUDIT_LOGS_SUMMARY);
+    },
+    async export(query?: ListAuditLogsQuery): Promise<Result<ExportReportResult>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.AUDIT_LOGS_EXPORT, query);
+    },
+  },
+  bank: {
+    async listAccounts(storeId?: number): Promise<Result<CompanyBankAccount[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_ACCOUNTS_LIST, storeId);
+    },
+    async createAccount(input: CreateBankAccountInput): Promise<Result<CompanyBankAccount>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_ACCOUNTS_CREATE, input);
+    },
+    async updateAccount(input: UpdateBankAccountInput): Promise<Result<CompanyBankAccount>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_ACCOUNTS_UPDATE, input);
+    },
+    async listTransactions(query: ListBankTransactionsQuery): Promise<Result<BankTransaction[]>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_TRANSACTIONS_LIST, query);
+    },
+    async depositCash(input: CashToBankDepositInput): Promise<Result<BankTransaction>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_CASH_DEPOSIT, input);
+    },
+    async clearCheque(input: ClearChequeInput): Promise<Result<BankTransaction>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_CHEQUE_CLEAR, input);
+    },
+    async getSummaryStats(storeId?: number): Promise<Result<BankSummaryStats>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.BANK_SUMMARY_STATS, storeId);
+    },
+  },
+  attachments: {
+    async save(input: SaveAttachmentInput): Promise<Result<SaveAttachmentResult>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ATTACHMENTS_SAVE, input);
+    },
+    async read(relativePath: string): Promise<Result<ReadAttachmentResult>> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ATTACHMENTS_READ, relativePath);
     },
   },
 };

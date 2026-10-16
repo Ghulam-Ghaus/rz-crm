@@ -23,9 +23,15 @@ import type {
   HeldCart,
   BackupManifest,
   BackupStatus,
+  RestoreDrillResult,
+  BackupScheduleConfig,
+  ExportArchiveBundleResult,
   UserSession,
   StockLocationItem,
 } from '@rz-crm/contracts';
+import { RestoreDrillModal } from './components/RestoreDrillModal.js';
+import { BackupScheduleModal } from './components/BackupScheduleModal.js';
+import { ExportArchiveBundleModal } from './components/ExportArchiveBundleModal.js';
 import { LoginScreen } from './components/LoginScreen.js';
 import { InventoryTab } from './components/InventoryTab.js';
 import { CommercialInvoicesTab } from './components/CommercialInvoicesTab.js';
@@ -33,11 +39,19 @@ import { UsersTab } from './components/UsersTab.js';
 import { RzLogo } from './components/RzLogo.js';
 import { GrnItemSearchPicker } from './components/GrnItemSearchPicker.js';
 import { ProfitLossTab } from './components/ProfitLossTab.js';
+import { FinancialReportsTab } from './components/FinancialReportsTab.js';
 import { ExpensesTab } from './components/ExpensesTab.js';
 import { ReturnsTab } from './components/ReturnsTab.js';
+import { StakeholdersTab } from './components/StakeholdersTab.js';
+import { AuditLogTab } from './components/AuditLogTab.js';
+import { BankAccountsTab } from './components/BankAccountsTab.js';
 import { PosWeightAmountModal, PosWeightTarget } from './components/PosWeightAmountModal.js';
+import { ToastProvider } from './context/ToastContext.js';
+import { NotificationProvider, useNotifications } from './context/NotificationContext.js';
+import { NotificationBanner } from './components/NotificationBanner.js';
+import { NotificationDrawer } from './components/NotificationDrawer.js';
 
-type ActiveTab = 'pos' | 'products' | 'categories' | 'purchasing' | 'returns' | 'production' | 'custom-orders' | 'inventory' | 'expenses' | 'scanner' | 'reports' | 'users' | 'diagnostics';
+type ActiveTab = 'pos' | 'products' | 'categories' | 'purchasing' | 'returns' | 'stakeholders' | 'bank' | 'production' | 'custom-orders' | 'inventory' | 'expenses' | 'scanner' | 'reports' | 'users' | 'audit' | 'diagnostics';
 
 interface CartItem {
   variantId: number;
@@ -254,6 +268,46 @@ function generate80mmReceiptHtml(receipt: SaleReceipt, cashierName: string): str
 </html>`;
 }
 
+const TopBarNotificationBell: React.FC = () => {
+  const { unreadCount, isDrawerOpen, setIsDrawerOpen } = useNotifications();
+  return (
+    <button
+      type="button"
+      onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+      style={{
+        position: 'relative',
+        background: isDrawerOpen ? '#e2e8f0' : '#f1f5f9',
+        border: '1px solid #cbd5e1',
+        borderRadius: '6px',
+        padding: '3px 8px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        transition: 'all 0.15s ease',
+      }}
+      title="View notifications & system alerts"
+    >
+      <span style={{ fontSize: '14px', lineHeight: 1 }}>🔔</span>
+      {unreadCount > 0 && (
+        <span
+          style={{
+            background: '#ef4444',
+            color: '#ffffff',
+            fontSize: '10px',
+            fontWeight: 800,
+            borderRadius: '10px',
+            padding: '1px 5px',
+            lineHeight: 1,
+          }}
+        >
+          {unreadCount}
+        </span>
+      )}
+    </button>
+  );
+};
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
   const [store, setStore] = useState<Store | null>(null);
@@ -306,7 +360,7 @@ export const App: React.FC = () => {
     (tab: ActiveTab): boolean => {
       if (!session) return false;
       if (session.role === 'admin') return true;
-      if (tab === 'users' || tab === 'diagnostics') return false; // Admin only
+      if (tab === 'users' || tab === 'diagnostics' || tab === 'audit') return false; // Admin only
 
       if (session.permissions && session.permissions.length > 0) {
         return session.permissions.includes(tab);
@@ -314,7 +368,7 @@ export const App: React.FC = () => {
 
       switch (session.role) {
         case 'manager':
-          return ['pos', 'inventory', 'products', 'purchasing', 'returns', 'production', 'custom-orders', 'expenses', 'scanner', 'reports'].includes(tab);
+          return ['pos', 'inventory', 'products', 'purchasing', 'returns', 'stakeholders', 'production', 'custom-orders', 'expenses', 'scanner', 'reports'].includes(tab);
         case 'cashier':
           return ['pos', 'inventory', 'returns', 'custom-orders', 'scanner'].includes(tab);
         case 'purchaser':
@@ -445,8 +499,7 @@ export const App: React.FC = () => {
   const [savingPosCust, setSavingPosCust] = useState<boolean>(false);
   const [posCustError, setPosCustError] = useState<string | null>(null);
 
-  // Reports, Shift History & Backup State
-  const [reportsSubTab, setReportsSubTab] = useState<'sales' | 'shifts' | 'pnl' | 'backup'>('sales');
+  const [reportsSubTab, setReportsSubTab] = useState<'financial' | 'pnl' | 'sales' | 'shifts' | 'backup'>('financial');
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [salesSearch, setSalesSearch] = useState<string>('');
   const [shiftsList, setShiftsList] = useState<Shift[]>([]);
@@ -464,6 +517,15 @@ export const App: React.FC = () => {
   const [selectedBackupToRestore, setSelectedBackupToRestore] = useState<BackupManifest | null>(null);
   const [restoreConfirmChecked, setRestoreConfirmChecked] = useState<boolean>(false);
   const [restoringInProgress, setRestoringInProgress] = useState<boolean>(false);
+
+  // Phase 10: Restore Drill, Automated Schedule & Disaster Recovery Bundle State
+  const [backupSchedule, setBackupSchedule] = useState<BackupScheduleConfig | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState<boolean>(false);
+  const [restoreDrillRunning, setRestoreDrillRunning] = useState<string | null>(null);
+  const [drillResult, setDrillResult] = useState<RestoreDrillResult | null>(null);
+  const [showDrillModal, setShowDrillModal] = useState<boolean>(false);
+  const [bundleTargetFilename, setBundleTargetFilename] = useState<string | null>(null);
+  const [showBundleModal, setShowBundleModal] = useState<boolean>(false);
 
   // Purchasing & GRN State
   const [purchasingSubTab, setPurchasingSubTab] = useState<'grn' | 'pos' | 'suppliers'>('grn');
@@ -637,8 +699,8 @@ export const App: React.FC = () => {
   const [ordCustomerId, setOrdCustomerId] = useState<string>('');
   const [ordDueDate, setOrdDueDate] = useState<string>('');
   const [ordEventDate, setOrdEventDate] = useState<string>('');
-  const [ordCakeFlavor, setOrdCakeFlavor] = useState<string>('Chocolate Fudge');
-  const [ordCakeSize, setOrdCakeSize] = useState<string>('2 Lbs');
+  const [ordCakeFlavor, setOrdCakeFlavor] = useState<string>('SS-304 / Chrome Plated');
+  const [ordCakeSize, setOrdCakeSize] = useState<string>('1/2" Standard');
   const [ordCakeMessage, setOrdCakeMessage] = useState<string>('');
   const [ordDecorationNotes, setOrdDecorationNotes] = useState<string>('');
   const [ordAllergensNotes, setOrdAllergensNotes] = useState<string>('');
@@ -942,7 +1004,7 @@ export const App: React.FC = () => {
   const handleExportShiftReportCsv = (report: ShiftReport) => {
     const lines: string[] = [];
     lines.push('"CASHIER SHIFT SUMMARY REPORT"');
-    lines.push(`"Store Name","${(report.storeName || 'Bakery Store').replace(/"/g, '""')}"`);
+    lines.push(`"Store Name","${(report.storeName || 'RZ Enterprises').replace(/"/g, '""')}"`);
     lines.push(`"Shift Code","${(report.shiftCode || '#' + report.shiftId).replace(/"/g, '""')}"`);
     lines.push(`"Cashier ID","${report.cashierId}"`);
     lines.push(`"Status","${report.status.toUpperCase()}"`);
@@ -1132,12 +1194,14 @@ export const App: React.FC = () => {
     if (!window.bakery?.backup) return;
     setBackupLoading(true);
     try {
-      const [listRes, statusRes] = await Promise.all([
+      const [listRes, statusRes, schedRes] = await Promise.all([
         window.bakery.backup.listBackups(),
         window.bakery.backup.getStatus(),
+        window.bakery.backup.getScheduleConfig(),
       ]);
       if (listRes.success) setBackupsList(listRes.data);
       if (statusRes.success) setBackupStatus(statusRes.data);
+      if (schedRes.success) setBackupSchedule(schedRes.data);
     } catch (err: unknown) {
       setBackupActionMsg({
         type: 'error',
@@ -1147,6 +1211,64 @@ export const App: React.FC = () => {
       setBackupLoading(false);
     }
   }, []);
+
+  const handleSaveBackupSchedule = async (config: BackupScheduleConfig) => {
+    if (!window.bakery?.backup) return;
+    const res = await window.bakery.backup.setScheduleConfig(config);
+    if (res.success) {
+      setBackupSchedule(res.data);
+      setBackupActionMsg({
+        type: 'ok',
+        text: `Automated backup schedule updated! Interval: Every ${res.data.frequencyHours}h, Auto-backup on shift close: ${res.data.autoBackupOnShiftClose ? 'Enabled' : 'Disabled'}`,
+      });
+    } else {
+      throw new Error(res.error.message);
+    }
+  };
+
+  const handleRunRestoreDrill = async (filename: string) => {
+    if (!window.bakery?.backup) return;
+    setRestoreDrillRunning(filename);
+    try {
+      const res = await window.bakery.backup.runRestoreDrill(filename);
+      if (res.success) {
+        setDrillResult(res.data);
+        setShowDrillModal(true);
+        if (res.data.passed) {
+          setBackupActionMsg({
+            type: 'ok',
+            text: `🧪 Restore drill passed for '${filename}' (${res.data.tablesVerifiedCount} tables checked, 0 FK violations in ${res.data.durationMs}ms)!`,
+          });
+        } else {
+          setBackupActionMsg({
+            type: 'error',
+            text: `⚠️ Restore drill failed for '${filename}': ${res.data.message}`,
+          });
+        }
+      } else {
+        setBackupActionMsg({ type: 'error', text: res.error.message });
+      }
+    } catch (err: unknown) {
+      setBackupActionMsg({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to execute restore drill',
+      });
+    } finally {
+      setRestoreDrillRunning(null);
+    }
+  };
+
+  const handleExportArchiveBundle = async (filename: string, includeAttachments: boolean): Promise<ExportArchiveBundleResult> => {
+    if (!window.bakery?.backup) throw new Error('Backup API not available');
+    const res = await window.bakery.backup.exportArchiveBundle({
+      filename,
+      includeAttachments,
+    });
+    if (res.success) {
+      return res.data;
+    }
+    throw new Error(res.error.message);
+  };
 
   // Create On-Demand Database Backup Snapshot
   const handleCreateBackup = async () => {
@@ -2973,7 +3095,9 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="app-layout">
+    <ToastProvider>
+      <NotificationProvider storeId={store?.id || 1}>
+        <div className="app-layout">
       {/* Left Sidebar Menu */}
       <aside className="app-sidebar no-print">
         {/* Brand Header */}
@@ -3112,6 +3236,26 @@ export const App: React.FC = () => {
               <span>Expenses & Salaries</span>
             </button>
           )}
+          {(session.role === 'admin' || session.role === 'manager') && (
+            <button
+              type="button"
+              className={`nav-item-btn ${activeTab === 'stakeholders' ? 'active' : ''}`}
+              onClick={() => setActiveTab('stakeholders')}
+            >
+              <span className="nav-item-icon">🤝</span>
+              <span>Stakeholders & Equity</span>
+            </button>
+          )}
+          {(session.role === 'admin' || session.role === 'manager') && (
+            <button
+              type="button"
+              className={`nav-item-btn ${activeTab === 'bank' ? 'active' : ''}`}
+              onClick={() => setActiveTab('bank')}
+            >
+              <span className="nav-item-icon">🏦</span>
+              <span>Bank Accounts</span>
+            </button>
+          )}
           {session.role === 'admin' && (
             <button
               type="button"
@@ -3120,6 +3264,16 @@ export const App: React.FC = () => {
             >
               <span className="nav-item-icon">👥</span>
               <span>Staff & Roles</span>
+            </button>
+          )}
+          {session.role === 'admin' && (
+            <button
+              type="button"
+              className={`nav-item-btn ${activeTab === 'audit' ? 'active' : ''}`}
+              onClick={() => setActiveTab('audit')}
+            >
+              <span className="nav-item-icon">🛡️</span>
+              <span>Audit Trail</span>
             </button>
           )}
           {session.role === 'admin' && (
@@ -3151,12 +3305,14 @@ export const App: React.FC = () => {
               {activeTab === 'inventory' && 'Real-Time Stock Balances & Movement Audit'}
               {activeTab === 'products' && 'Product Catalog Management'}
               {activeTab === 'purchasing' && 'Purchasing & Goods Receiving Notes (GRN)'}
-              {activeTab === 'production' && 'Bakery Production & Recipe Management (BOM)'}
-              {activeTab === 'custom-orders' && 'Custom Cake Bookings & Advance Orders'}
+              {activeTab === 'production' && 'Assembly & Packaging BOM Management'}
+              {activeTab === 'custom-orders' && 'Special Client Bookings & Custom Orders'}
               {activeTab === 'scanner' && 'Barcode Scanner Test & Hardware Probe'}
               {activeTab === 'reports' && 'Sales Invoices & Cashier Shift Reports'}
               {activeTab === 'expenses' && 'Operating Expenses & Staff Salaries (Payroll)'}
+              {activeTab === 'bank' && 'Company Bank Accounts, Cash Deposits & Cheque Clearing'}
               {activeTab === 'users' && 'Staff Accounts & Role-Based Access Control (RBAC)'}
+              {activeTab === 'audit' && 'Security Activity & Audit Monitor'}
               {activeTab === 'diagnostics' && 'System Diagnostics & Health'}
             </h1>
           </div>
@@ -3220,10 +3376,31 @@ export const App: React.FC = () => {
                 🔒 Lock
               </button>
             </div>
+            <TopBarNotificationBell />
           </div>
         </header>
 
         <div className="main-content-body">
+          {/* Real-time Critical Alerts Banner */}
+          <NotificationBanner
+            onNavigateTab={(tab, subTab) => {
+              setActiveTab(tab as ActiveTab);
+              if (subTab && tab === 'reports') {
+                setReportsSubTab(subTab as any);
+              }
+            }}
+          />
+
+          {/* Slide-over Notification Center Drawer */}
+          <NotificationDrawer
+            onNavigateTab={(tab, subTab) => {
+              setActiveTab(tab as ActiveTab);
+              if (subTab && tab === 'reports') {
+                setReportsSubTab(subTab as any);
+              }
+            }}
+          />
+
           {/* TAB 1: POS TERMINAL */}
           {activeTab === 'pos' && (
             <div>
@@ -4932,7 +5109,7 @@ export const App: React.FC = () => {
                           {suppliers.length === 0 && (
                             <tr>
                               <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: '#9ca3af' }}>
-                                No suppliers registered yet. Click "+ Register Supplier" to add your bakery vendors.
+                                No suppliers registered yet. Click "+ Register Supplier" to add your commercial vendors and suppliers.
                               </td>
                             </tr>
                           )}
@@ -4945,7 +5122,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 4: PRODUCTION & RECIPES (BOM) */}
+          {/* TAB 4: ASSEMBLY & PACKAGING BOM */}
           {activeTab === 'production' && (
             <div>
               {/* Header Navigation & Actions Bar */}
@@ -4976,7 +5153,7 @@ export const App: React.FC = () => {
                     style={{ fontSize: '13px', fontWeight: 600, padding: '8px 16px' }}
                     onClick={() => setProductionSubTab('recipes')}
                   >
-                    📖 Recipe Book / BOM ({recipes.length})
+                    📋 Assembly BOM Kits ({recipes.length})
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -4997,7 +5174,7 @@ export const App: React.FC = () => {
                       style={{ fontSize: '12px', padding: '7px 14px', background: '#7c3aed' }}
                       onClick={() => setShowCreateRecipeModal(true)}
                     >
-                      + Create New Recipe
+                      + Create New Assembly BOM
                     </button>
                   )}
                   <button
@@ -5053,7 +5230,7 @@ export const App: React.FC = () => {
               {productionSubTab === 'runs' && (
                 <div className="panel-card">
                   <div className="panel-header">
-                    <span className="panel-title">Bakery Batch Production Runs</span>
+                    <span className="panel-title">Assembly & Packaging Production Runs</span>
                     <span className="panel-badge ok">{productionRuns.length} Runs</span>
                   </div>
                   <div className="panel-body" style={{ padding: 0 }}>
@@ -5061,7 +5238,7 @@ export const App: React.FC = () => {
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Run #</th>
-                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Recipe Name</th>
+                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>BOM / Kit Name</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Output Product</th>
                           <th style={{ textAlign: 'center', padding: '10px 14px' }}>Batches</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px' }}>Planned Yield</th>
@@ -5226,19 +5403,19 @@ export const App: React.FC = () => {
                 </div>
               )}
 
-              {/* SUB-VIEW 2: RECIPE BOOK / BOM */}
+              {/* SUB-VIEW 2: ASSEMBLY BOM KITS */}
               {productionSubTab === 'recipes' && (
                 <div className="panel-card">
                   <div className="panel-header">
-                    <span className="panel-title">Master Bakery Recipes & Bill of Materials (BOM)</span>
-                    <span className="panel-badge ok">{recipes.length} Recipes</span>
+                    <span className="panel-title">Master Assembly Bill of Materials (BOM) &amp; Kits</span>
+                    <span className="panel-badge ok">{recipes.length} Assembly BOMs</span>
                   </div>
                   <div className="panel-body" style={{ padding: 0 }}>
                     <table className="data-table">
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Recipe Code</th>
-                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Recipe Name</th>
+                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>BOM Code</th>
+                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>BOM / Kit Name</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Finished Product</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px' }}>Batch Yield</th>
                           <th style={{ textAlign: 'center', padding: '10px 14px' }}>Version</th>
@@ -5334,7 +5511,7 @@ export const App: React.FC = () => {
                         {recipes.length === 0 && (
                           <tr>
                             <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#9ca3af' }}>
-                              No master recipes registered yet. Click "+ Create New Recipe" to specify your BOMs.
+                              No assembly BOMs registered yet. Click "+ Create New Assembly BOM" to specify your BOMs.
                             </td>
                           </tr>
                         )}
@@ -5666,7 +5843,7 @@ export const App: React.FC = () => {
               <div className="panel-card">
                 <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="panel-title">Active Cake Bookings & Custom Orders</span>
+                    <span className="panel-title">Active Client Bookings &amp; Custom Orders</span>
                     <span className="panel-badge ok">Local-First</span>
                   </div>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>
@@ -5695,7 +5872,7 @@ export const App: React.FC = () => {
                         <tr style={{ background: '#f8fafc' }}>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Order #</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Customer</th>
-                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Cake Specifications & Inscription</th>
+                          <th style={{ textAlign: 'left', padding: '10px 14px' }}>Item Specifications &amp; Custom Markings</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Pickup Due</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px' }}>Agreed Total</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px' }}>Deposit Paid</th>
@@ -5748,7 +5925,7 @@ export const App: React.FC = () => {
                                   )}
                                 </td>
 
-                                {/* Cake Specs */}
+                                {/* Item Specifications */}
                                 <td style={{ padding: '10px 14px', maxWidth: '300px' }}>
                                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '3px' }}>
                                     {order.cakeFlavor && (
@@ -5762,7 +5939,7 @@ export const App: React.FC = () => {
                                           fontWeight: 600,
                                         }}
                                       >
-                                        🎂 {order.cakeFlavor}
+                                        🔧 {order.cakeFlavor}
                                       </span>
                                     )}
                                     {order.cakeSize && (
@@ -5776,7 +5953,7 @@ export const App: React.FC = () => {
                                           fontWeight: 600,
                                         }}
                                       >
-                                        ⚖️ {order.cakeSize}
+                                        📏 {order.cakeSize}
                                       </span>
                                     )}
                                   </div>
@@ -5798,7 +5975,7 @@ export const App: React.FC = () => {
                                   )}
                                   {order.decorationNotes && (
                                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                                      🎨 {order.decorationNotes}
+                                      ⚙️ {order.decorationNotes}
                                     </div>
                                   )}
                                 </td>
@@ -5962,9 +6139,9 @@ export const App: React.FC = () => {
                                         className="btn-secondary"
                                         style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 600, color: '#c2410c' }}
                                         onClick={() => handleUpdateOrderStatus(order.id, 'IN_PRODUCTION')}
-                                        title="Send to kitchen for baking"
+                                        title="Send to workshop for assembly/fabrication"
                                       >
-                                        👨‍🍳 Bake
+                                        ⚙️ Assemble
                                       </button>
                                     )}
 
@@ -5974,7 +6151,7 @@ export const App: React.FC = () => {
                                         className="btn-secondary"
                                         style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, color: '#047857' }}
                                         onClick={() => handleUpdateOrderStatus(order.id, 'READY')}
-                                        title="Mark cake finished & ready for pickup"
+                                        title="Mark order finished & ready for pickup/dispatch"
                                       >
                                         ✨ Ready
                                       </button>
@@ -6002,9 +6179,9 @@ export const App: React.FC = () => {
                                         className="btn-primary"
                                         style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, background: '#0f766e' }}
                                         onClick={() => handleUpdateOrderStatus(order.id, 'COLLECTED')}
-                                        title="Hand over cake to customer"
+                                        title="Hand over / dispatch goods to customer"
                                       >
-                                        🎁 Handover
+                                        📦 Handover
                                       </button>
                                     )}
 
@@ -6042,12 +6219,12 @@ export const App: React.FC = () => {
                         {customOrders.length === 0 && (
                           <tr>
                             <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                              <div style={{ fontSize: '36px', marginBottom: '8px' }}>🎂</div>
+                              <div style={{ fontSize: '36px', marginBottom: '8px' }}>📋</div>
                               <div style={{ fontSize: '14px', fontWeight: 600, color: '#475569' }}>
                                 No Custom Orders Yet
                               </div>
                               <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
-                                Click "+ Book Custom Order" to record advance cake bookings with flavor, size, and advance deposits.
+                                Click "+ Book Custom Order" to record advance client bookings with material, dimensions, and advance deposits.
                               </div>
                             </td>
                           </tr>
@@ -6308,6 +6485,13 @@ export const App: React.FC = () => {
                 }}
               >
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    className={`tab-btn ${reportsSubTab === 'financial' ? 'active' : ''}`}
+                    style={{ fontSize: '13px', fontWeight: 700, padding: '8px 16px' }}
+                    onClick={() => setReportsSubTab('financial')}
+                  >
+                    📊 Financial Reports & Cheques
+                  </button>
                   <button
                     className={`tab-btn ${reportsSubTab === 'pnl' ? 'active' : ''}`}
                     style={{ fontSize: '13px', fontWeight: 700, padding: '8px 16px' }}
@@ -6673,6 +6857,16 @@ export const App: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        className="btn-secondary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '7px 14px' }}
+                        onClick={() => setShowScheduleModal(true)}
+                        title="Configure automated backup schedule and shift close safety triggers"
+                      >
+                        <span>⏱️</span>
+                        <span>Schedule &amp; Auto-Backup</span>
+                      </button>
+                      <button
+                        type="button"
                         className="btn-primary"
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '7px 16px' }}
                         onClick={() => setShowCreateBackupModal(true)}
@@ -6688,16 +6882,16 @@ export const App: React.FC = () => {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                       gap: '12px',
                       marginBottom: '16px',
                     }}
                   >
-                    <div className="panel-card" style={{ padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className="panel-card" style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>
                         Total Retained Snapshots
                       </div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
                         {backupStatus?.totalBackups ?? backupsList.length}
                       </div>
                       <div style={{ fontSize: '11px', color: '#059669', marginTop: '2px' }}>
@@ -6705,23 +6899,23 @@ export const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="panel-card" style={{ padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className="panel-card" style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>
                         Last Successful Backup
                       </div>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginTop: '6px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
                         {backupStatus?.lastBackupAtUtc ? formatDateTime(backupStatus.lastBackupAtUtc) : 'No backup yet'}
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                        Online WAL flush & sealed
+                        Online WAL flush &amp; sealed
                       </div>
                     </div>
 
-                    <div className="panel-card" style={{ padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className="panel-card" style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>
                         Total Storage Used
                       </div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
                         {backupStatus ? ((backupStatus.totalSizeBytes / 1024) / 1024).toFixed(2) + ' MB' : '0.00 MB'}
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
@@ -6729,15 +6923,29 @@ export const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="panel-card" style={{ padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>
-                        Disaster Recovery
+                    <div className="panel-card" style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>
+                          Automated Schedule
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '9.5px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            backgroundColor: backupSchedule?.enabled ? '#ecfdf5' : '#f1f5f9',
+                            color: backupSchedule?.enabled ? '#065f46' : '#64748b',
+                          }}
+                        >
+                          {backupSchedule?.enabled ? 'ACTIVE' : 'DISABLED'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#0284c7', marginTop: '6px' }}>
-                        Pre-Restore Safety Active
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                        {backupSchedule?.enabled ? `Every ${backupSchedule.frequencyHours}h + Shift Close` : 'Manual Snapshots Only'}
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                        Automatic fallback snapshot before restore
+                        Next: {backupSchedule?.nextScheduledBackupUtc ? formatDateTime(backupSchedule.nextScheduledBackupUtc) : 'Not scheduled'}
                       </div>
                     </div>
                   </div>
@@ -6762,7 +6970,7 @@ export const App: React.FC = () => {
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>SHA-256 Checksum</th>
                           <th style={{ textAlign: 'left', padding: '10px 14px' }}>Notes / Reason</th>
                           <th style={{ textAlign: 'center', padding: '10px 12px' }}>Status</th>
-                          <th style={{ textAlign: 'center', padding: '10px 14px', width: '220px' }}>Actions</th>
+                          <th style={{ textAlign: 'center', padding: '10px 14px', width: '310px' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6809,11 +7017,49 @@ export const App: React.FC = () => {
                               </span>
                             </td>
                             <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                              <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
                                 <button
                                   type="button"
                                   className="btn-secondary"
-                                  style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                                  style={{
+                                    padding: '4px 7px',
+                                    fontSize: '11px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#f0fdf4',
+                                    color: '#166534',
+                                    borderColor: '#bbf7d0',
+                                    fontWeight: 700,
+                                  }}
+                                  onClick={() => handleRunRestoreDrill(bk.filename)}
+                                  disabled={restoreDrillRunning === bk.filename}
+                                  title="Run isolated restore recovery drill simulation without modifying live database"
+                                >
+                                  {restoreDrillRunning === bk.filename ? '⏳ Drilling...' : '🧪 Drill'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  style={{
+                                    padding: '4px 7px',
+                                    fontSize: '11px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#eff6ff',
+                                    color: '#1d4ed8',
+                                    borderColor: '#bfdbfe',
+                                    fontWeight: 600,
+                                  }}
+                                  onClick={() => {
+                                    setBundleTargetFilename(bk.filename);
+                                    setShowBundleModal(true);
+                                  }}
+                                  title="Export complete disaster recovery bundle with DB snapshot, manifest, and photo attachments"
+                                >
+                                  📦 DR Bundle
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  style={{ padding: '4px 7px', fontSize: '11px', borderRadius: '4px' }}
                                   onClick={() => handleVerifyBackup(bk.filename)}
                                   title="Recalculate SHA-256 and run SQLite integrity pragma"
                                 >
@@ -6823,7 +7069,7 @@ export const App: React.FC = () => {
                                   type="button"
                                   className="tab-btn"
                                   style={{
-                                    padding: '4px 8px',
+                                    padding: '4px 7px',
                                     fontSize: '11px',
                                     borderRadius: '4px',
                                     backgroundColor: '#fff1f2',
@@ -6857,6 +7103,11 @@ export const App: React.FC = () => {
                 </div>
               )}
 
+              {/* SUB-VIEW 0: COMPREHENSIVE FINANCIAL REPORTS & CHEQUE FORECASTING */}
+              {reportsSubTab === 'financial' && (
+                <FinancialReportsTab store={store} />
+              )}
+
               {/* SUB-VIEW 4: PROFIT & LOSS (P&L) ANALYTICS */}
               {reportsSubTab === 'pnl' && (
                 <ProfitLossTab
@@ -6884,6 +7135,14 @@ export const App: React.FC = () => {
             />
           )}
 
+          {/* TAB: SECURITY ACTIVITY & AUDIT MONITOR */}
+          {activeTab === 'audit' && session.role === 'admin' && (
+            <AuditLogTab
+              currentUsername={session.username}
+              currentUserRole={session.role}
+            />
+          )}
+
           {/* TAB: EXPENSES & SALARIES (PAYROLL) */}
           {activeTab === 'expenses' && (
             <ExpensesTab
@@ -6900,6 +7159,20 @@ export const App: React.FC = () => {
               storeId={store?.id || 1}
               currentUserName={session.displayName || 'admin'}
             />
+          )}
+
+          {/* TAB: STAKEHOLDERS, EQUITY & PROFIT DISTRIBUTIONS */}
+          {activeTab === 'stakeholders' && (
+            <StakeholdersTab
+              storeId={store?.id || 1}
+              currentUserName={session.displayName || 'admin'}
+              currentUserRole={session.role}
+            />
+          )}
+
+          {/* TAB: COMPANY BANK ACCOUNTS & CHEQUE CLEARING */}
+          {activeTab === 'bank' && (
+            <BankAccountsTab />
           )}
         </div>
       </main>
@@ -7050,6 +7323,36 @@ export const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL: RESTORE DRILL SIMULATION REPORT (PHASE 10) */}
+      {showDrillModal && (
+        <RestoreDrillModal
+          result={drillResult}
+          onClose={() => setShowDrillModal(false)}
+        />
+      )}
+
+      {/* MODAL: AUTOMATED BACKUP SCHEDULE (PHASE 10) */}
+      {showScheduleModal && (
+        <BackupScheduleModal
+          currentConfig={backupSchedule}
+          onSave={handleSaveBackupSchedule}
+          onClose={() => setShowScheduleModal(false)}
+        />
+      )}
+
+      {/* MODAL: EXPORT DISASTER RECOVERY ARCHIVE BUNDLE (PHASE 10) */}
+      {showBundleModal && bundleTargetFilename && (
+        <ExportArchiveBundleModal
+          filename={bundleTargetFilename}
+          onExport={handleExportArchiveBundle}
+          onOpenFolder={handleOpenBackupFolder}
+          onClose={() => {
+            setShowBundleModal(false);
+            setBundleTargetFilename(null);
+          }}
+        />
       )}
 
       {/* MODAL: OPEN SHIFT */}
@@ -8722,7 +9025,7 @@ export const App: React.FC = () => {
                     <label className="form-label">Product Code *</label>
                     <input
                       type="text"
-                      placeholder="e.g. CROISSANT-01"
+                      placeholder="e.g. VALVE-CP-01"
                       value={pCode}
                       onChange={(e) => setPCode(e.target.value)}
                       className="form-input"
@@ -8733,7 +9036,7 @@ export const App: React.FC = () => {
                     <label className="form-label">SKU *</label>
                     <input
                       type="text"
-                      placeholder="e.g. SKU-CRO-01"
+                      placeholder="e.g. SKU-VALVE-01"
                       value={pSku}
                       onChange={(e) => setPSku(e.target.value)}
                       className="form-input"
@@ -8746,7 +9049,7 @@ export const App: React.FC = () => {
                   <label className="form-label">Product Name *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Butter Croissant"
+                    placeholder="e.g. Brass Ball Valve 1/2 Inch"
                     value={pName}
                     onChange={(e) => setPName(e.target.value)}
                     onKeyDown={(e) => {
@@ -9034,7 +9337,7 @@ export const App: React.FC = () => {
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Biscuits & Cookies, Cakes, Beverages"
+                    placeholder="e.g. Sanitary Ware, CP Fittings, Pipes & Valves"
                     value={quickCatName}
                     onChange={(e) => setQuickCatName(e.target.value)}
                     autoFocus
@@ -9046,7 +9349,7 @@ export const App: React.FC = () => {
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. BISCUITS (auto-generated if blank)"
+                    placeholder="e.g. SANITARY (auto-generated if blank)"
                     value={quickCatCode}
                     onChange={(e) => setQuickCatCode(e.target.value)}
                   />
@@ -9371,7 +9674,7 @@ export const App: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
-              <span className="modal-title">🏢 Register New Bakery Supplier</span>
+              <span className="modal-title">🏢 Register New Commercial Supplier</span>
               <button
                 type="button"
                 className="modal-close"
@@ -9388,7 +9691,7 @@ export const App: React.FC = () => {
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. SUP-FLOUR-01"
+                      placeholder="e.g. SUP-VALVE-01"
                       value={supCode}
                       onChange={(e) => setSupCode(e.target.value)}
                       required
@@ -9399,7 +9702,7 @@ export const App: React.FC = () => {
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. National Flour Mills Ltd"
+                      placeholder="e.g. Master Sanitary & Fittings Ltd"
                       value={supName}
                       onChange={(e) => setSupName(e.target.value)}
                       required
@@ -10467,7 +10770,7 @@ export const App: React.FC = () => {
                     <label className="form-label">Product Code *</label>
                     <input
                       type="text"
-                      placeholder="e.g. CROISSANT-01"
+                      placeholder="e.g. VALVE-CP-01"
                       value={grnQuickCode}
                       onChange={(e) => setGrnQuickCode(e.target.value)}
                       className="form-input"
@@ -10478,7 +10781,7 @@ export const App: React.FC = () => {
                     <label className="form-label">SKU *</label>
                     <input
                       type="text"
-                      placeholder="e.g. SKU-CRO-01"
+                      placeholder="e.g. SKU-VALVE-01"
                       value={grnQuickSku}
                       onChange={(e) => setGrnQuickSku(e.target.value)}
                       className="form-input"
@@ -10491,7 +10794,7 @@ export const App: React.FC = () => {
                   <label className="form-label">Product Name *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Butter Croissant"
+                    placeholder="e.g. Brass Ball Valve 1/2 Inch"
                     value={grnQuickName}
                     onChange={(e) => setGrnQuickName(e.target.value)}
                     onKeyDown={(e) => {
@@ -11387,7 +11690,7 @@ export const App: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: '680px', width: '90%' }}>
             <div className="modal-header">
-              <h3>Create Master Recipe & BOM</h3>
+              <h3>Create Master Assembly BOM</h3>
               <button
                 type="button"
                 className="modal-close"
@@ -11400,20 +11703,20 @@ export const App: React.FC = () => {
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '70vh', overflowY: 'auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div>
-                    <label className="form-label">Recipe Code</label>
+                    <label className="form-label">BOM Code</label>
                     <input
                       type="text"
-                      placeholder="e.g. RCP-CROISSANT-01"
+                      placeholder="e.g. BOM-VALVE-KIT-01"
                       value={rcpCode}
                       onChange={(e) => setRcpCode(e.target.value)}
                       className="form-input"
                     />
                   </div>
                   <div>
-                    <label className="form-label">Recipe Name *</label>
+                    <label className="form-label">BOM / Kit Name *</label>
                     <input
                       type="text"
-                      placeholder="e.g. Classic Butter Croissant"
+                      placeholder="e.g. 1/2 Inch Brass Bibcock Assembly Kit"
                       value={rcpName}
                       onChange={(e) => setRcpName(e.target.value)}
                       className="form-input"
@@ -11470,7 +11773,7 @@ export const App: React.FC = () => {
                   <label className="form-label">Description / Instructions</label>
                   <input
                     type="text"
-                    placeholder="e.g. Standard 12-hour laminated dough croissant recipe"
+                    placeholder="e.g. Standard assembly bill of materials including brass spindle, washer, and chrome body"
                     value={rcpDescription}
                     onChange={(e) => setRcpDescription(e.target.value)}
                     className="form-input"
@@ -11481,7 +11784,7 @@ export const App: React.FC = () => {
                 <div style={{ marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
-                      Bill of Materials (BOM Raw Material Ingredients) *
+                      Bill of Materials (Assembly Component Items) *
                     </label>
                     <button
                       type="button"
@@ -11623,7 +11926,7 @@ export const App: React.FC = () => {
                   style={{ background: '#7c3aed' }}
                   disabled={productionLoading}
                 >
-                  {productionLoading ? 'Saving...' : 'Save Recipe & BOM'}
+                  {productionLoading ? 'Saving...' : 'Save Assembly BOM'}
                 </button>
               </div>
             </form>
@@ -11648,14 +11951,14 @@ export const App: React.FC = () => {
             <form onSubmit={handleCreateRun}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <label className="form-label">Master Recipe *</label>
+                  <label className="form-label">Master Assembly BOM *</label>
                   <select
                     value={runRecipeId}
                     onChange={(e) => setRunRecipeId(e.target.value)}
                     className="form-input"
                     required
                   >
-                    <option value="">-- Select Master Recipe --</option>
+                    <option value="">-- Select Master Assembly BOM --</option>
                     {recipes.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name} ({r.code}) — Yield: {r.expectedYieldQuantity} {r.outputUnitCode}/batch
@@ -11710,13 +12013,13 @@ export const App: React.FC = () => {
                           Expected Output: {totalYield} {selRecipe.outputUnitCode} of {selRecipe.outputVariantName}
                         </div>
                         <div style={{ fontSize: '11px', color: '#047857', marginTop: '2px' }}>
-                          Ingredient quantities scale {batches}x according to the master BOM ({items.length} ingredients).
+                          Component quantities scale {batches}x according to the master BOM ({items.length} components).
                         </div>
                       </div>
 
                       {items.length > 0 && (
                         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px 10px', fontSize: '12px' }}>
-                          <div style={{ fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Required Ingredients for {batches} Batch(es):</div>
+                          <div style={{ fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Required Components for {batches} Batch(es):</div>
                           <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             {items.map((it, idx) => (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '11px' }}>
@@ -11739,9 +12042,9 @@ export const App: React.FC = () => {
                           lineHeight: 1.4,
                         }}
                       >
-                        <div style={{ fontWeight: 700, marginBottom: '2px' }}>🍞 Stock Availability Policy:</div>
-                        <div>• <strong>Option A (Bake Anyway):</strong> Permitted! The system records negative stock movements on the immutable ledger until purchases/GRN are booked.</div>
-                        <div>• <strong>Option B (Emergency Cash Buy):</strong> If ingredients were bought with cash from the drawer, record it via Petty Cash / Drawer Expenses to reconcile cash immediately.</div>
+                        <div style={{ fontWeight: 700, marginBottom: '2px' }}>⚙️ Stock Availability &amp; Assembly Policy:</div>
+                        <div>• <strong>Option A (Assemble Anyway):</strong> Permitted! The system records negative stock movements on the immutable ledger until purchases/GRN are booked.</div>
+                        <div>• <strong>Option B (Emergency Cash Buy):</strong> If components/materials were bought with cash from the drawer, record it via Petty Cash / Drawer Expenses to reconcile cash immediately.</div>
                         <div style={{ marginTop: '4px' }}>
                           <button
                             type="button"
@@ -11764,7 +12067,7 @@ export const App: React.FC = () => {
                   <label className="form-label">Production Run Notes</label>
                   <input
                     type="text"
-                    placeholder="e.g. Morning bakery shift production batch"
+                    placeholder="e.g. Batch assembly run - 50 sets"
                     value={runNotes}
                     onChange={(e) => setRunNotes(e.target.value)}
                     className="form-input"
@@ -11826,7 +12129,7 @@ export const App: React.FC = () => {
                     Run #: <strong>{completingRun.runNumber}</strong>
                   </div>
                   <div>
-                    Recipe: <strong>{completingRun.recipeName}</strong> ({completingRun.plannedBatchCount}x batches)
+                    Assembly BOM: <strong>{completingRun.recipeName}</strong> ({completingRun.plannedBatchCount}x batches)
                   </div>
                   <div>
                     Target Output: <strong>{completingRun.plannedOutputQuantity} {completingRun.outputUnitCode}</strong> of {completingRun.outputVariantName}
@@ -11910,9 +12213,9 @@ export const App: React.FC = () => {
                   }}
                 >
                   <div style={{ fontWeight: 700, marginBottom: '2px' }}>⚡ Atomic Ledger Update &amp; Stock Policy:</div>
-                  <div>• <strong>Raw material consumption:</strong> Ingredients will be deducted from the immutable stock ledger (<code>PRODUCTION_CONSUMPTION</code>) and finished goods added (<code>PRODUCTION_OUTPUT</code>).</div>
-                  <div>• <strong>Option A (Bake Anyway):</strong> Permitted! The system records negative stock movements if balance is 0 or low until purchases are logged.</div>
-                  <div>• <strong>Option B (Emergency Cash Buy):</strong> If ingredients were bought with cash from the drawer, record it via Petty Cash to keep the drawer reconciled.</div>
+                  <div>• <strong>Raw material consumption:</strong> Component parts and materials will be deducted from the immutable stock ledger (<code>PRODUCTION_CONSUMPTION</code>) and finished goods added (<code>PRODUCTION_OUTPUT</code>).</div>
+                  <div>• <strong>Option A (Assemble Anyway):</strong> Permitted! The system records negative stock movements if balance is 0 or low until purchases are logged.</div>
+                  <div>• <strong>Option B (Emergency Cash Buy):</strong> If components were bought with cash from the drawer, record it via Petty Cash to keep the drawer reconciled.</div>
                   <div style={{ marginTop: '4px' }}>
                     <button
                       type="button"
@@ -11982,7 +12285,7 @@ export const App: React.FC = () => {
                 }}
               >
                 <div>
-                  Recipe: <strong>{selectedRunDetail.recipeName}</strong> (v{selectedRunDetail.recipeVersionId})
+                  Assembly BOM: <strong>{selectedRunDetail.recipeName}</strong> (v{selectedRunDetail.recipeVersionId})
                 </div>
                 <div>
                   Status: <strong style={{ color: selectedRunDetail.status === 'COMPLETED' ? '#059669' : '#d97706' }}>
@@ -12070,7 +12373,7 @@ export const App: React.FC = () => {
           <div className="modal-card" style={{ maxWidth: '580px', width: '90%' }}>
             <div className="modal-header">
               <h3>
-                Recipe BOM: {selectedRecipeDetail.name} ({selectedRecipeDetail.code})
+                Assembly BOM: {selectedRecipeDetail.name} ({selectedRecipeDetail.code})
               </h3>
               <button
                 type="button"
@@ -12117,12 +12420,12 @@ export const App: React.FC = () => {
 
               <div>
                 <h4 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: '#1e293b' }}>
-                  Bill of Materials Ingredients
+                  Bill of Materials Components &amp; Parts
                 </h4>
                 <table className="data-table">
                   <thead>
                     <tr style={{ background: '#f8fafc' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>Ingredient</th>
+                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>Component / Part</th>
                       <th style={{ textAlign: 'right', padding: '6px 10px' }}>Quantity Per Batch</th>
                       <th style={{ textAlign: 'center', padding: '6px 10px' }}>Unit</th>
                       <th style={{ textAlign: 'right', padding: '6px 10px' }}>Wastage Allowance</th>
@@ -12143,7 +12446,7 @@ export const App: React.FC = () => {
                       selectedRecipeDetail.currentVersion.items.length === 0) && (
                         <tr>
                           <td colSpan={4} style={{ textAlign: 'center', padding: '16px', color: '#94a3b8' }}>
-                            No ingredient items found for this recipe version.
+                            No component items found for this assembly BOM version.
                           </td>
                         </tr>
                       )}
@@ -12169,7 +12472,7 @@ export const App: React.FC = () => {
         <div className="modal-overlay" style={{ padding: '16px', alignItems: 'center' }}>
           <div className="modal-card" style={{ maxWidth: '640px', width: '90%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div className="modal-header" style={{ flexShrink: 0 }}>
-              <h3>🎂 Book Custom Cake / Advance Order</h3>
+              <h3>📋 Book Special Client / Custom Order</h3>
               <button
                 type="button"
                 className="modal-close"
@@ -12213,7 +12516,7 @@ export const App: React.FC = () => {
                 {/* Dates: Due Date & Event Date */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label className="form-label">Pickup Due Date & Time *</label>
+                    <label className="form-label">Pickup / Delivery Due Date & Time *</label>
                     <input
                       type="datetime-local"
                       className="form-input"
@@ -12223,7 +12526,7 @@ export const App: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="form-label">Event Date (Optional)</label>
+                    <label className="form-label">Required Date (Optional)</label>
                     <input
                       type="date"
                       className="form-input"
@@ -12233,62 +12536,62 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Cake Specs: Flavor & Size */}
+                {/* Item Specs: Material & Size */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label className="form-label">Cake Flavor / Sponge</label>
+                    <label className="form-label">Material / Model / Grade</label>
                     <input
                       type="text"
                       className="form-input"
                       value={ordCakeFlavor}
                       onChange={(e) => setOrdCakeFlavor(e.target.value)}
-                      placeholder="e.g. Belgian Chocolate Fudge"
+                      placeholder="e.g. Chrome Plated Brass / SS-304 / PPRC"
                     />
                   </div>
                   <div>
-                    <label className="form-label">Cake Size / Weight</label>
+                    <label className="form-label">Size / Dimensions / Rating</label>
                     <input
                       type="text"
                       className="form-input"
                       value={ordCakeSize}
                       onChange={(e) => setOrdCakeSize(e.target.value)}
-                      placeholder="e.g. 2 Lbs / 2-Tier 5 Lbs"
+                      placeholder="e.g. 1/2 Inch / 3/4 Inch / Heavy Duty"
                     />
                   </div>
                 </div>
 
-                {/* Inscription / Cake Message */}
+                {/* Inscription / Custom Marking */}
                 <div>
-                  <label className="form-label">Inscription on Cake / Piping Message</label>
+                  <label className="form-label">Custom Engraving / Marking / Specifications</label>
                   <input
                     type="text"
                     className="form-input"
                     value={ordCakeMessage}
                     onChange={(e) => setOrdCakeMessage(e.target.value)}
-                    placeholder='e.g. "Happy 25th Birthday Zara!"'
+                    placeholder='e.g. "RZ-ENTERPRISES SPEC-B / CLIENT LOT #49"'
                   />
                 </div>
 
-                {/* Decoration & Allergen Notes */}
+                {/* Decoration & Technical Notes */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label className="form-label">Decoration / Theme Notes</label>
+                    <label className="form-label">Fabrication / Finish Notes</label>
                     <textarea
                       className="form-input"
                       rows={2}
                       value={ordDecorationNotes}
                       onChange={(e) => setOrdDecorationNotes(e.target.value)}
-                      placeholder="e.g. Golden pearls, pink roses, fondant topper"
+                      placeholder="e.g. Polished chrome finish, thread-sealed, boxed packing"
                     />
                   </div>
                   <div>
-                    <label className="form-label">Allergies / Special Instructions</label>
+                    <label className="form-label">Technical / Inspection Instructions</label>
                     <textarea
                       className="form-input"
                       rows={2}
                       value={ordAllergensNotes}
                       onChange={(e) => setOrdAllergensNotes(e.target.value)}
-                      placeholder="e.g. Nut-free, less sweet, eggless"
+                      placeholder="e.g. Pressure tested 10-bar, rubber washers included"
                     />
                   </div>
                 </div>
@@ -12560,24 +12863,24 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Cake Specifications Box */}
+              {/* Item Specifications Box */}
               <div style={{ background: '#fefce8', padding: '14px', borderRadius: '6px', border: '1px solid #fef08a' }}>
                 <h4 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: '#854d0e' }}>
-                  🎂 Cake Specifications & Kitchen Notes
+                  📋 Item Specifications &amp; Fabrication Notes
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px', marginBottom: '8px' }}>
                   <div>
-                    Flavor / Sponge: <strong>{selectedOrderDetail.cakeFlavor || 'Standard'}</strong>
+                    Material / Grade: <strong>{selectedOrderDetail.cakeFlavor || 'Standard'}</strong>
                   </div>
                   <div>
-                    Size / Tiers: <strong>{selectedOrderDetail.cakeSize || 'Standard'}</strong>
+                    Size / Dimensions: <strong>{selectedOrderDetail.cakeSize || 'Standard'}</strong>
                   </div>
                 </div>
 
                 {selectedOrderDetail.cakeMessage && (
                   <div style={{ marginTop: '8px' }}>
                     <div style={{ fontSize: '11px', color: '#854d0e', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Piping Inscription:
+                      Custom Marking / Inscription:
                     </div>
                     <div
                       style={{
@@ -12599,13 +12902,13 @@ export const App: React.FC = () => {
 
                 {selectedOrderDetail.decorationNotes && (
                   <div style={{ marginTop: '8px', fontSize: '12px', color: '#713f12' }}>
-                    <strong>Decoration / Theme:</strong> {selectedOrderDetail.decorationNotes}
+                    <strong>Fabrication / Finish:</strong> {selectedOrderDetail.decorationNotes}
                   </div>
                 )}
 
                 {selectedOrderDetail.allergensNotes && (
                   <div style={{ marginTop: '4px', fontSize: '12px', color: '#b91c1c' }}>
-                    <strong>Allergies / Special:</strong> {selectedOrderDetail.allergensNotes}
+                    <strong>Technical / Inspection:</strong> {selectedOrderDetail.allergensNotes}
                   </div>
                 )}
               </div>
@@ -12977,7 +13280,9 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+        </div>
+      </NotificationProvider>
+    </ToastProvider>
   );
 };
 

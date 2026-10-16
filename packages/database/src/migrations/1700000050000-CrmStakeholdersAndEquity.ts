@@ -128,14 +128,12 @@ export class CrmStakeholdersAndEquity1700000050000 implements MigrationInterface
     `);
 
     // Create Indexes for high-performance financial reporting and ledger lookups
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_stakeholder_equity_stakeholder_id" ON "stakeholder_equity" ("stakeholder_id");
-      CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_stakeholder_id" ON "stakeholder_transactions" ("stakeholder_id");
-      CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_type" ON "stakeholder_transactions" ("type");
-      CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_date" ON "stakeholder_transactions" ("txn_date");
-      CREATE INDEX IF NOT EXISTS "idx_distribution_lines_run_id" ON "profit_distribution_lines" ("run_id");
-      CREATE INDEX IF NOT EXISTS "idx_distribution_lines_stakeholder_id" ON "profit_distribution_lines" ("stakeholder_id");
-    `);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_stakeholder_equity_stakeholder_id" ON "stakeholder_equity" ("stakeholder_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_stakeholder_id" ON "stakeholder_transactions" ("stakeholder_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_type" ON "stakeholder_transactions" ("type")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_stakeholder_tx_date" ON "stakeholder_transactions" ("txn_date")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_distribution_lines_run_id" ON "profit_distribution_lines" ("run_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_distribution_lines_stakeholder_id" ON "profit_distribution_lines" ("stakeholder_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

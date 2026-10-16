@@ -52,6 +52,10 @@ import {
   RestoreBackupInput,
   ExportReportInput,
   ExportReportResult,
+  RestoreDrillResult,
+  BackupScheduleConfig,
+  ExportArchiveBundleInput,
+  ExportArchiveBundleResult,
 } from './backup/index.js';
 import {
   User,
@@ -113,6 +117,31 @@ import {
   PayoutDistributionRunInput,
   CompanyPnlSummary,
 } from './stakeholders/index.js';
+import {
+  ReceivablesAgeingReport,
+  PayablesAgeingReport,
+  ChequeRegisterReport,
+  StockValuationReport,
+  StakeholderStatementReport,
+} from './reports/index.js';
+import {
+  ListAuditLogsQuery,
+  ListAuditLogsResponse,
+  AuditSummaryStats,
+} from './audit/index.js';
+import {
+  CompanyBankAccount,
+  CreateBankAccountInput,
+  UpdateBankAccountInput,
+  BankTransaction,
+  ListBankTransactionsQuery,
+  CashToBankDepositInput,
+  ClearChequeInput,
+  BankSummaryStats,
+  SaveAttachmentInput,
+  SaveAttachmentResult,
+  ReadAttachmentResult,
+} from './bank/index.js';
 
 export const IPC_CHANNELS = {
   // Auth & Users
@@ -213,6 +242,10 @@ export const IPC_CHANNELS = {
   BACKUP_GET_STATUS: 'backup:get_status',
   BACKUP_VERIFY: 'backup:verify',
   BACKUP_OPEN_FOLDER: 'backup:open_folder',
+  BACKUP_RESTORE_DRILL: 'backup:restore_drill',
+  BACKUP_SCHEDULE_GET: 'backup:schedule:get',
+  BACKUP_SCHEDULE_SET: 'backup:schedule:set',
+  BACKUP_EXPORT_ARCHIVE: 'backup:export_archive',
 
   // Expenses & Operating Costs
   EXPENSES_CATEGORIES_LIST: 'expenses:categories:list',
@@ -258,11 +291,34 @@ export const IPC_CHANNELS = {
   STAKEHOLDERS_DISTRIBUTIONS_PAYOUT: 'stakeholders:distributions:payout',
   STAKEHOLDERS_PNL_SUMMARY: 'stakeholders:pnl:summary',
 
-  // Reports & Diagnostics Export
+  // Reports & Business Analytics
   REPORTS_PROFIT_LOSS: 'reports:profit_loss',
+  REPORTS_RECEIVABLES_AGEING: 'reports:receivables:ageing',
+  REPORTS_PAYABLES_AGEING: 'reports:payables:ageing',
+  REPORTS_CHEQUE_REGISTER: 'reports:cheques:register',
+  REPORTS_STOCK_VALUATION: 'reports:stock:valuation',
+  REPORTS_STAKEHOLDER_STATEMENT: 'reports:stakeholder:statement',
 
   REPORTS_EXPORT_FILE: 'reports:export_file',
   DIAGNOSTICS_EXPORT_BUNDLE: 'diagnostics:export_bundle',
+
+  // Security & Audit Activity Monitor
+  AUDIT_LOGS_LIST: 'audit:logs:list',
+  AUDIT_LOGS_SUMMARY: 'audit:logs:summary',
+  AUDIT_LOGS_EXPORT: 'audit:logs:export',
+
+  // Company Bank Accounts & Cheque Clearing (Phase 9)
+  BANK_ACCOUNTS_LIST: 'bank:accounts:list',
+  BANK_ACCOUNTS_CREATE: 'bank:accounts:create',
+  BANK_ACCOUNTS_UPDATE: 'bank:accounts:update',
+  BANK_TRANSACTIONS_LIST: 'bank:transactions:list',
+  BANK_CASH_DEPOSIT: 'bank:cash:deposit',
+  BANK_CHEQUE_CLEAR: 'bank:cheque:clear',
+  BANK_SUMMARY_STATS: 'bank:summary:stats',
+
+  // Attachments (WebP photo attachments)
+  ATTACHMENTS_SAVE: 'attachments:save',
+  ATTACHMENTS_READ: 'attachments:read',
 } as const;
 
 export type IpcChannelType = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -377,6 +433,10 @@ export interface BakeryDesktopApi {
     getStatus(): Promise<Result<BackupStatus>>;
     verifyBackup(filename: string): Promise<Result<{ isValid: boolean; message: string }>>;
     openBackupFolder(): Promise<Result<void>>;
+    runRestoreDrill(filename: string): Promise<Result<RestoreDrillResult>>;
+    getScheduleConfig(): Promise<Result<BackupScheduleConfig>>;
+    setScheduleConfig(config: BackupScheduleConfig): Promise<Result<BackupScheduleConfig>>;
+    exportArchiveBundle(input: ExportArchiveBundleInput): Promise<Result<ExportArchiveBundleResult>>;
   };
   expenses: {
     listCategories(): Promise<Result<ExpenseCategory[]>>;
@@ -423,10 +483,32 @@ export interface BakeryDesktopApi {
     getPnlSummary(storeId: number, startDate?: string, endDate?: string): Promise<Result<CompanyPnlSummary>>;
   };
   reports: {
-
     getProfitLoss(query: GetProfitLossQuery): Promise<Result<ProfitLossReport>>;
+    getReceivablesAgeing(storeId: number): Promise<Result<ReceivablesAgeingReport>>;
+    getPayablesAgeing(storeId: number): Promise<Result<PayablesAgeingReport>>;
+    getChequeRegister(storeId: number): Promise<Result<ChequeRegisterReport>>;
+    getStockValuation(storeId: number): Promise<Result<StockValuationReport>>;
+    getStakeholderStatement(storeId: number, stakeholderId: number): Promise<Result<StakeholderStatementReport>>;
     exportFile(input: ExportReportInput): Promise<Result<ExportReportResult>>;
     exportDiagnosticsBundle(): Promise<Result<ExportReportResult>>;
+  };
+  audit: {
+    list(query?: ListAuditLogsQuery): Promise<Result<ListAuditLogsResponse>>;
+    getSummary(): Promise<Result<AuditSummaryStats>>;
+    export(query?: ListAuditLogsQuery): Promise<Result<ExportReportResult>>;
+  };
+  bank: {
+    listAccounts(storeId?: number): Promise<Result<CompanyBankAccount[]>>;
+    createAccount(input: CreateBankAccountInput): Promise<Result<CompanyBankAccount>>;
+    updateAccount(input: UpdateBankAccountInput): Promise<Result<CompanyBankAccount>>;
+    listTransactions(query: ListBankTransactionsQuery): Promise<Result<BankTransaction[]>>;
+    depositCash(input: CashToBankDepositInput): Promise<Result<BankTransaction>>;
+    clearCheque(input: ClearChequeInput): Promise<Result<BankTransaction>>;
+    getSummaryStats(storeId?: number): Promise<Result<BankSummaryStats>>;
+  };
+  attachments: {
+    save(input: SaveAttachmentInput): Promise<Result<SaveAttachmentResult>>;
+    read(relativePath: string): Promise<Result<ReadAttachmentResult>>;
   };
 }
 

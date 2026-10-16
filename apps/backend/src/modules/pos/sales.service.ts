@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import {
   SaleEntity,
@@ -53,10 +53,12 @@ export class PosSaleService {
         }
       }
 
-      // 2. Shift Resolution (CRM Auto-Session Support)
       let shift: ShiftEntity | null = null;
       if (input.shiftId) {
         shift = await shiftRepo.findOne({ where: { id: input.shiftId } });
+        if (shift && shift.status === 'closed') {
+          throw new BadRequestException(`Cannot record sale on closed shift ${input.shiftId}`);
+        }
       }
       if (!shift || shift.status !== 'open') {
         shift = await shiftRepo.findOne({ where: { storeId: input.storeId, status: 'open' } });

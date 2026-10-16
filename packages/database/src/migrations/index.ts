@@ -14,6 +14,7 @@ import { CrmSalesTerminalAndCommercialInvoicing1700000020000 } from './170000002
 import { CrmPurchasingAndSupplierPayables1700000030000 } from './1700000030000-CrmPurchasingAndSupplierPayables.js';
 import { CrmCommercialReturnsAndReversals1700000040000 } from './1700000040000-CrmCommercialReturnsAndReversals.js';
 import { CrmStakeholdersAndEquity1700000050000 } from './1700000050000-CrmStakeholdersAndEquity.js';
+import { CompanyBankAccountsAndReconciliation1700000060000 } from './1700000060000-CompanyBankAccountsAndReconciliation.js';
 
 export const MIGRATIONS = [
   AppIdentity1699999999000,
@@ -32,6 +33,7 @@ export const MIGRATIONS = [
   CrmPurchasingAndSupplierPayables1700000030000,
   CrmCommercialReturnsAndReversals1700000040000,
   CrmStakeholdersAndEquity1700000050000,
+  CompanyBankAccountsAndReconciliation1700000060000,
 ];
 
 export * from './1699999999000-AppIdentity.js';
@@ -50,4 +52,5 @@ export * from './1700000020000-CrmSalesTerminalAndCommercialInvoicing.js';
 export * from './1700000030000-CrmPurchasingAndSupplierPayables.js';
 export * from './1700000040000-CrmCommercialReturnsAndReversals.js';
 export * from './1700000050000-CrmStakeholdersAndEquity.js';
+export * from './1700000060000-CompanyBankAccountsAndReconciliation.js';
 

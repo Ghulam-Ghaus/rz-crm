@@ -54,3 +54,5 @@ export * from './stakeholder-transaction.entity.js';
 export * from './fiscal-period.entity.js';
 export * from './profit-distribution-run.entity.js';
 export * from './profit-distribution-line.entity.js';
+export * from './company-bank-account.entity.js';
+export * from './bank-transaction.entity.js';

@@ -86,6 +86,14 @@ export class UsersService {
     });
 
     if (!user || !user.isActive) {
+      await auditRepo.save({
+        userId: user ? user.id : null,
+        username: input.username,
+        action: 'AUTH_LOGIN_FAILED',
+        resource: 'auth',
+        detailsJson: JSON.stringify({ reason: !user ? 'User not found' : 'Account deactivated', _severity: 'CRITICAL' }),
+        createdAtUtc: nowUtcString(),
+      });
       throw new Error('Invalid username or account is deactivated');
     }
 
@@ -98,6 +106,14 @@ export class UsersService {
     }
 
     if (!authenticated) {
+      await auditRepo.save({
+        userId: user.id,
+        username: user.username,
+        action: 'AUTH_LOGIN_FAILED',
+        resource: 'auth',
+        detailsJson: JSON.stringify({ reason: 'Incorrect PIN or password', _severity: 'CRITICAL' }),
+        createdAtUtc: nowUtcString(),
+      });
       throw new Error('Authentication failed: incorrect PIN or password');
     }
 

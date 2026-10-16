@@ -11,10 +11,10 @@ interface UsersTabProps {
 const AVAILABLE_FORMS = [
   { key: 'pos', name: 'POS Sales Terminal', icon: '🛒', desc: 'Counter sales, cart, register drawer, shifts' },
   { key: 'purchasing', name: 'Purchasing & GRN', icon: '🚚', desc: 'Suppliers, purchase orders, goods receipts, khata' },
-  { key: 'custom-orders', name: 'Custom Cake Orders', icon: '🎂', desc: 'Advance bookings, customer deposits, held carts' },
+  { key: 'custom-orders', name: 'Special Client Bookings', icon: '📋', desc: 'Advance bookings, customer deposits, custom fabrication' },
   { key: 'inventory', name: 'Stock & Inventory', icon: '📦', desc: 'Live stock balances, stock ledger, adjustments' },
-  { key: 'products', name: 'Product Catalog', icon: '🥐', desc: 'Products, variants, buy & sell dual prices, barcodes' },
-  { key: 'production', name: 'Production & Recipes', icon: '👨‍🍳', desc: 'Recipes (BOM), baking batches, wastage tracking' },
+  { key: 'products', name: 'Product Catalog', icon: '🏷️', desc: 'Sanitary ware, pipes, fittings, dual prices, barcodes' },
+  { key: 'production', name: 'Assembly & Packaging BOM', icon: '⚙️', desc: 'Bill of Materials (BOM), assembly kits, wastage tracking' },
   { key: 'reports', name: 'Sales & Shift Reports', icon: '📊', desc: 'Sales invoices, shift X/Z reconciliation, P&L reports' },
   { key: 'expenses', name: 'Expenses & Payroll', icon: '💸', desc: 'Utility bills, repairs, staff advances & monthly salary payroll' },
   { key: 'scanner', name: 'Barcode Scanner Hardware', icon: '🔍', desc: 'Barcode scanner test & hardware probe' },
@@ -749,7 +749,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="panel-title">Bakery Staff & Assigned Forms</span>
+                <span className="panel-title">Staff Directory &amp; Module Permissions</span>
                 <span className="panel-badge ok">{users.length} registered</span>
               </div>
             </div>

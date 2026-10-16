@@ -52,3 +52,53 @@ export const ExportReportResultSchema = z.object({
 });
 
 export type ExportReportResult = z.infer<typeof ExportReportResultSchema>;
+
+// ==========================================
+// Phase 10: Restore Drill Simulation & Recovery
+// ==========================================
+export const RestoreDrillResultSchema = z.object({
+  snapshotFilename: z.string(),
+  drillExecutedAtUtc: z.string(),
+  passed: z.boolean(),
+  integrityCheckResult: z.string(),
+  foreignKeyCheckPassed: z.boolean(),
+  tablesVerifiedCount: z.number().int().nonnegative(),
+  recordCounts: z.record(z.string(), z.number().int().nonnegative()),
+  durationMs: z.number().int().nonnegative(),
+  message: z.string(),
+});
+export type RestoreDrillResult = z.infer<typeof RestoreDrillResultSchema>;
+
+// ==========================================
+// Phase 10: Automated Scheduled Backups
+// ==========================================
+export const BackupScheduleConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  frequencyHours: z.number().int().positive().default(24),
+  autoBackupOnShiftClose: z.boolean().default(true),
+  includeAttachments: z.boolean().default(true),
+  lastAutoBackupUtc: z.string().nullable().optional(),
+  nextScheduledBackupUtc: z.string().nullable().optional(),
+});
+export type BackupScheduleConfig = z.infer<typeof BackupScheduleConfigSchema>;
+
+// ==========================================
+// Phase 10: Disaster Recovery Archive Bundle
+// ==========================================
+export const ExportArchiveBundleInputSchema = z.object({
+  filename: z.string().min(1),
+  includeAttachments: z.boolean().default(true),
+});
+export type ExportArchiveBundleInput = z.infer<typeof ExportArchiveBundleInputSchema>;
+
+export const ExportArchiveBundleResultSchema = z.object({
+  saved: z.boolean(),
+  destinationPath: z.string().nullable().optional(),
+  databaseIncluded: z.boolean().default(true),
+  manifestIncluded: z.boolean().default(true),
+  attachmentsCount: z.number().int().nonnegative().default(0),
+  totalSizeBytes: z.number().int().nonnegative().default(0),
+  message: z.string(),
+});
+export type ExportArchiveBundleResult = z.infer<typeof ExportArchiveBundleResultSchema>;
+
